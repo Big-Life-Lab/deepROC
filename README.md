@@ -11,12 +11,19 @@ Ensure you have a Python 3.8 interpreter.
 Copy files in Python3.8 folder to a local folder.  
 Create a subfolder called output.
 
-Remaining instructions to be completed.  
-
-python test_deepROC.py
-python analyze15.py
-python compare15.py
-
-## Explanation of variables
-To be completed.
+In your code:  
+import deepROC as ac  
   
+Then call the deepROC function with appropriate inputs:  
+results, EQresults = ac.deepROC(*kwargs)  
+  
+An example (under extras) of calling the function can be found in:  
+test_deepROC.py  
+  
+Analysis can be performed with:  
+analyze15.py  
+compare15.py  
+analyze-table.py  
+
+## Examples/explanations of inputs to deepROC
+To be completed.  
