@@ -1,6 +1,6 @@
-# test_pAUCc.py
+# deepROC.py
 #
-# Copyright 2020 Ottawa Hospital Research Institute
+# Copyright 2021 Ottawa Hospital Research Institute
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 #   Original Matlab version by Andre Carrington, 2018
 #   Ported to Python by Yusuf Sheikh and Andre Carrington, 2020
 #   Imports the Transcript class
+#   Additions and corrections from Partial-AUC-C to create DeepROC by Andre Carrington, 2021
 #
 # Functions:
 #    makeLabels01
@@ -26,8 +27,12 @@
 #    distance_point_to_line
 #    optimal_ROC_point_indices
 #    getListValuesByIndex
-#    get_ROC_test_scores_labels_ranges
-#    test_pAUCc
+#    computeCalibrationCurve
+#    plotCalibrationCurve
+#    calibrationOK
+#    doCalibration
+#    doAdvancedMeasures
+#    deepROC
 #
 # inputs:  testNum, verbose
 # outputs: results displayed and logged to a file
@@ -61,14 +66,23 @@ useFile             = True
 useSingleTestVector = False
 useAllTestVectors   = False
 
-# specify corresponding input parameters
-fileName            = 'input-matlab/result581.mat'  # a matlab file (or future: csv file) for input
-singleTestVectorNum = 1  # which of 11 test vectors from the function get_ROC_test_scores_labels_ranges below
+# specify file input parameters
+mydata              = ['040', '356', '529', '536', '581', '639', '643']
+fileName            = f'input-matlab/result{mydata[2]}.mat'  # a matlab file (or future: csv file) for input
+scoreVarColumn      = 'yscoreTest'                  # yscoreTest, yscore
+targetVarColumn     = 'ytest'                       # ytest, yhatTest, yhat, ytrain
+#scoreVarColumn      = 'yscore'                   # yscoreTest, yscore
+#targetVarColumn     = 'yhat'                     # ytest, yhatTest, yhat, ytrain
+
+# specify single test vector input parameters
+singleTestVectorNum = 12  # which of 12 test vectors the function get_ROC_test_scores_labels_ranges below
 
 # choose data science parameters
 rangeAxis           = 'FPR'  # examine ranges (next) by FPR or TPR
-filePAUCranges      = [[0, 0.33], [0.33, 0.67], [0.67, 1.0]]  # ranges, as few or many as you like
-useCloseRangePoint  = True   # automatically alter the ranges to match with the closest points in data
+filePAUCranges      = [[0.0, 1/3], [1/3, 2/3], [2/3, 1.0]]  # ranges, as few or many as you like
+useCloseRangePoint  = False  # automatically alter the ranges to match with the closest points in data
+                             # useful if you want the discrete form of balanced accuracy to exactly match
+                             # because we don't bother to interpolate that one
 costs               = dict(cFP=1, cFN=1, cTP=0, cTN=0)  # specify relative costs explicitly (default shown)
 #costs              = {}                                # use the default costs
 rates               = False                             # treat costs as rates, e.g. cFPR (default False)
@@ -77,12 +91,17 @@ rates               = False                             # treat costs as rates, 
 sanityCheckWholeAUC = True
 showPlot            = True
 showData            = False
-showError           = True
+showError           = True     # areas in ROC plots that represent error
 
-import do_pAUCc          as ac
-import numpy             as np
-import scipy.io          as sio
-from   sklearn           import metrics
+import do_pAUCc            as ac
+import getPDF              as acKDE
+import numpy               as np
+import pandas              as pd
+import scipy.io            as sio
+import matplotlib.pyplot   as plt
+import matplotlib.ticker   as ticker
+import sklearn.calibration as cal
+from   sklearn             import metrics
 import time
 import math
 import transcript
@@ -104,14 +123,14 @@ def makeLabels01(labels, posclass):
     return newlabels
 #enddef
 
-def getSkew_withRates(labels, posclass, rates=True, cFP=None, cFN=None, cTP=None, cTN=None):
+def getSkew_withRates(labels, posclass, quiet, rates=True, cFP=None, cFN=None, cTP=None, cTN=None):
     if rates is False:
         raise ValueError('rates should be True')
     cFPR, cFNR, cTPR, cTNR = (cFP, cFN, cTP, cTN)  # these are rates
-    return getSkew(labels, posclass, rates=rates, cFP=cFPR, cFN=cFNR, cTP=cTPR, cTN=cTNR)
+    return getSkew(labels, posclass, quiet, rates=rates, cFP=cFPR, cFN=cFNR, cTP=cTPR, cTN=cTNR)
 #enddef
 
-def getSkew(labels, posclass, rates=None, cFP=None, cFN=None, cTP=None, cTN=None):
+def getSkew(labels, posclass, quiet, rates=None, cFP=None, cFN=None, cTP=None, cTN=None):
     labels  = makeLabels01(labels, posclass)  # forces  labels to the set {0,1}
     P       = int(sum(labels))                # assumes labels are in set {0,1}
     N       = len(labels) - P
@@ -155,7 +174,7 @@ def getSkew(labels, posclass, rates=None, cFP=None, cFN=None, cTP=None, cTN=None
         msg = msg + f'\nCost of a true  negative {ratetxt}(cTN{ratechr}): {cTN:0.1f}'
     # endif
 
-    if len(msg):
+    if len(msg) and not quiet:
         print(f'{msg}\n')
     #endif
 
@@ -166,7 +185,7 @@ def getSkew(labels, posclass, rates=None, cFP=None, cFN=None, cTP=None, cTN=None
         cFPR, cFNR, cTPR, cTNR = (cFP, cFN, cTP, cTN)  # these are rates
         skew = ((N / P)**2) * (cFPR - cTNR) / (cFNR - cTPR)
         # see paper by Carrington for derivation
-    return skew
+    return skew, N, P
 #enddef
 
 def distance_point_to_line(qx, qy, px, py, m):
@@ -221,286 +240,229 @@ def getListValuesByIndex(a, idx_list):
     return b
 # enddef
 
-def get_ROC_test_scores_labels_ranges(testNum):
-    if testNum == 1:  # old testNum 1
-        descr  = 'Test 1. Fawcett Figure 3 data (balanced classes) with partial curve boundaries ' + \
-                 'aligned with instances on step verticals'
-        scores = np.array([ 0.9,  0.8,  0.7, 0.6, 0.55, 0.54, 0.53, 0.52, 0.51, 0.505, 0.4, 0.39, 0.38,
-                           0.37, 0.36, 0.35, 0.34, 0.33, 0.30, 0.1])
-        labels = np.array([   1,    1,    0,   1,    1,    1,    0,    0,    1,     0,   1,    0,    1,
-                              0,    0,    0,   1,    0,    1,    0])
-        pAUCranges = [[0.0, 0.3], [0.3, 0.5], [0.5, 1.0]]
-
-    elif testNum == 2:  # old testNum 2 (scores made proper for reference, no effect on measurement)
-        descr  = 'Test 2. Carrington Figure 7 data (with a 1:3 P:N class imbalance) with partial curve ' + \
-                 'boundaries aligned with instances.'
-        # This has the same scores as Carrington Figure 8, and scores similar to Fawcett Figure 3,
-        # but the labels are altered for class imbalance
-        scores = [ 0.95,  0.9,  0.8,  0.7, 0.65, 0.64, 0.63, 0.62, 0.61, 0.60, 0.5, 0.49, 0.48, 0.47,
-                   0.46, 0.45, 0.44, 0.43, 0.40, 0.2]
-        labels = [    1,    1,    0,    1,    1,    0,    0,    0,    0,    0,   0,    0,    1,    0,
-                      0,    0,    0,    0,    0,    0]
-        pAUCranges = [[0.0, 0.2], [0.2, 0.4], [0.4, 1.0]]
-
-    elif testNum == 3:  # no old testNum equivalent
-        descr  = 'Test 3. Hilden Figure 2a data with scores reversed to follow the normal convention'
-        # scores (0, 1, 2, 3) high for negative were changed to (3, 2, 1, 0) respectively, high for positive
-        scores = [ 3,  3,  3,  3,  3,  3,  3,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1]
-        labels = [ 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0]
-        pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
-
-    elif testNum == 4:  # no old testNum equivalent
-        descr = 'Test 4. Hilden Figure 2b data with scores reversed to follow the normal convention'
-        # scores (0, 1, 2, 3) high for negative were changed to (3, 2, 1, 0) respectively, high for positive
-        scores = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0]
-        labels = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
-
-    elif testNum == 5:  # old testNum 5 (scores made proper for reference, no effect on measurement)
-        descr  = 'Test 5. Hilden Figure 2c data with scores reversed to follow the normal convention'
-        # scores (0, 1, 2, 3) high for negative were changed to (3, 2, 1, 0) respectively, high for positive
-        # histogram counts were divided by 5, so that (50, 35, 15) became (10, 7, 3)
-        scores = [   0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3]
-        labels = [   0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]
-        pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
-
-    elif testNum == 6:  # old testNum 6
-        descr  = 'Test 6. Fawcett Figure 3 data with partial curve boundaries aligned with instances ' + \
-                 'on step horizontals'
-        scores = [ 0.9,  0.8,  0.7,  0.6, 0.55, 0.54, 0.53, 0.52, 0.51, 0.505, 0.4, 0.39, 0.38, 0.37,
-                  0.36, 0.35, 0.34, 0.33, 0.30, 0.1 ]
-        labels = [   1,    1,    0,    1,    1,   1,    0,    0,    1,     0,   1,    0,    1,    0,
-                     0,    0,    1,    0,    1,   0 ]
-        pAUCranges = [[0.0, 0.2], [0.2, 0.6], [0.6, 1.0]]
-
-    elif testNum == 7:  # old testNum 7
-        descr  = 'Test 7. Fawcett Figure 3 data with partial curve boundaries not aligned with '\
-                 'instances, requiring interpolation'
-        scores = [ 0.9,  0.8,  0.7,  0.6, 0.55, 0.54, 0.53, 0.52, 0.51, 0.505, 0.4, 0.39, 0.38, 0.37,
-                  0.36, 0.35, 0.34, 0.33, 0.30, 0.1 ]
-        labels = [   1,    1,    0,    1,    1,    1,    0,    0,    1,     0,   1,    0,    1,    0,
-                     0,    0,    1,    0,    1,    0]
-        pAUCranges = [[0.0, 0.17], [0.17, 0.52], [0.52, 1.0]]
-
-    elif testNum == 8:  # old testNum 8
-        descr  = 'Test 8. Carrington Figure 4 data with the same shape and measure as Fawcett Figure 3 ' + \
-                 'but with different scores'
-        scores = [ 0.95,  0.9,  0.8,  0.7, 0.65, 0.64, 0.63, 0.62, 0.61, 0.60, 0.5, 0.49, 0.48, 0.47,
-                   0.46, 0.45, 0.44, 0.43, 0.40, 0.2]
-        labels = [    1,    1,    0,    1,    1,    1,    0,    0,    1,    0,   1,    0,    1,    0,
-                      0,    0,    1,    0,    1,   0]
-        pAUCranges = [[0.0, 0.17], [0.17, 0.52], [0.52, 1.0]]
+def computeCalibrationCurve(plotTitle, dataTitle, quiet, params):
+    prob_true, prob_predicted =  cal.calibration_curve(**params)
+    # cal.calibration_curve(labels, scores, normalize=False, strategy=strategy, n_bins=bins)
+    actual_bins = len(prob_true)
+    bins = params['n_bins']
+    if bins > actual_bins and not quiet:
+        print(f'Used {actual_bins} bins instead of the {bins} bins requested.')
     #endif
+    # plt.plot(prob_predicted, prob_true, "s-", label=dataTitle)
+    # plt.xlabel('Predicted risk/probability')
+    # plt.ylabel('Observed risk/probability')
+    return prob_predicted, prob_true
+# enddef
 
-    elif testNum == 9:  # old testNum 9
-        descr  = 'Test 9. Carrington Figure 7 data: same instances as Carrington Figure 4, but different ' + \
-                 'labels'
-        scores = [ 0.95,  0.9,  0.8,  0.7, 0.65, 0.64, 0.63, 0.62, 0.61, 0.60, 0.5, 0.49, 0.48, 0.47,
-                   0.46, 0.45, 0.44, 0.43, 0.40, 0.2]
-        labels = [    1,    1,    0,    1,    1,    0,    0,    0,    0,    0,   0,    0,    1,    0,
-                      0,    0,    0,    0,    0,    0]
-        pAUCranges = [[0.0, 0.17], [0.17, 0.52], [0.52, 1.0]]
+def plotCalibrationCurve(plotTitle, dataTitle, quiet, params):
+    prob_true, prob_predicted = \
+        cal.calibration_curve(**params)
+        #cal.calibration_curve(labels, scores, normalize=False, strategy=strategy, n_bins=bins)
+    actual_bins = len(prob_true)
+    bins = params['n_bins']
+    if bins > actual_bins and not quiet:
+        print(f'Used {actual_bins} bins instead of the {bins} bins requested.')
+    #endif
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    plt.plot(prob_predicted, prob_true, "s-", label=dataTitle)
+    plt.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+    plt.xlabel('Predicted risk/probability')
+    plt.ylabel('Observed risk/probability')
+    plt.title(plotTitle)
+    plt.xlim(0.0, 1.0)
+    plt.ylim(0.0, 1.0)
+    ax.axes.xaxis.set_major_locator(ticker.MultipleLocator(0.1))
+    ax.axes.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
 
-    elif testNum == 10:  # old testNum 3
-        descr  = 'Test 10. Carrington Figure 8 data'
-        scores = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        labels = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
+    plotGrey = lambda x, y: plt.fill(x, y, 'k', alpha=0.3, linewidth=None)
+    x = []
+    y = []
+    shadeWidth = int(round(actual_bins / 3))
+    step       = shadeWidth * 2     # 3 bins=skip 2;  6 bins=skip 4;  9 bins=skip 6
+    for i in range(0, actual_bins, step):
+        x0 = i     * 1/actual_bins
+        x1 = (i+shadeWidth) * 1/actual_bins
+        x = x + [x0] + [x0] + [x1] + [x1]
+        y = y +  [0] +  [1] +  [1] +  [0]
+    #endfor
+    plotGrey(x, y)
 
-    elif testNum == 11:  # old testNum 4
-        descr  = 'Test 11. A classifier that does worse than "continuous" chance'
-        scores = [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6]
-        labels = [  0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1]
-        pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
+    return fig, ax
+# enddef
 
+def calibrationOK(numScores, bins):
+    if   (numScores/25) >= bins:
+        return 1
+    elif (numScores / 10) >= bins:
+        return 0.5
     else:
-        raise ValueError('Not a valid built-in test number.')
-    return scores, labels, pAUCranges, descr
+        return 0
+#endif
+
+def doCalibration(scores, labels, posclass, fileNum, showPlot, quiet):
+
+    scores, newlabels, labels = ac.sortScoresFixLabels(scores, labels, posclass, True) # True = ascending
+
+    maxScore  = float(max(scores))
+    minScore  = float(min(scores))
+    if not quiet:
+        print(f'Before: min,max = {minScore},{maxScore}')
+    #endif
+    scores_np = (np.array(scores) - minScore) / (maxScore - minScore)
+    maxScore  = float(max(scores_np))
+    minScore  = float(min(scores_np))
+    if not quiet:
+        print(f'After: min,max = {minScore},{maxScore}')
+    #endif
+    numScores  = int(len(scores_np))
+
+    #Xc_cts, Y = acKDE.getPDF(scores_np, 'epanechnikov', 'new', quiet)
+    #Y1D = Y[:, 0]
+    #y2 = np.interp(scores_np, Xc_cts, Y1D)
+    #if showPlot:
+    #   plt.plot(scores_np, y2)
+    #   plt.show()
+    ##endif
+
+    for bins in [3, 6, 9]:
+        if calibrationOK(numScores, bins) == 0 and (not quiet):
+                print(f'Not plotted: insufficient scores ({numScores}) for {bins} bins')
+        else:
+            plotTitle = f'Calibration plot with {bins} bins'
+            dataTitle = 'Classifier'
+            if calibrationOK(numScores, bins) == 0.5 and (not quiet):
+                print(f'Plotted despite insufficient scores ({numScores}) for {bins} bins')
+            # endif
+            params = dict(y_true=newlabels, y_prob=scores_np, normalize=False, strategy='uniform', n_bins=bins)
+            if showPlot:
+                fig, ax = plotCalibrationCurve(plotTitle, dataTitle, quiet, params)
+            else:
+                prob_predicted, prob_true = computeCalibrationCurve(plotTitle, dataTitle, quiet, params)
+            #endif
+            if showPlot:
+                plt.show()
+                fig.savefig(f'output/calib_{fileNum}-{bins}.png')
+            #endif
+        # endif
+    # endfor
 #enddef
 
-def test_pAUCc(testNum=1, costs={}, sanityCheckWholeAUC=True, showPlot=True, showData=True,
-               showError=True, fileName='', filePAUCranges={}, rangeAxis='FPR', useCloseRangePoint=False):
+def deepROC(testNum='1',    costs={}, sanityCheckWholeAUC=True,    showPlot=True, showData=True,
+            showError=True, useCloseRangePoint=False, pAUCranges={},
+            scores=[], labels=[], posclass=1, rangeAxis='FPR', quiet=False):
 
-    # choose the fileNum to use in the logfile
-    if fileName == '':
-        fileNum = testNum
-    else:  # reduce filename to any 3-digit log number it contains, if possible
-        fileNameBase = ntpath.basename(fileName)
-        fileNameBase = splitext(fileNameBase)[0]  # remove the extension
-        match        = re.search(r'\d\d\d', fileNameBase)
-        if match:
-            fileNum = match.group()
-        else:
-            fileNum = fileNameBase
-        #endif
-    #endif
+    doCalibration(scores, labels, posclass, testNum, showPlot, quiet)
 
-    # capture standard out to logfile
-    if showData:
-        logfn   = 'output/log_pAUCc_case' + str(fileNum) + '_verbose.txt'
-    else:
-        logfn = 'output/log_pAUCc_case' + str(fileNum) + '.txt'
-    #endif
-    transcript.start(logfn)
-
-    print('Output text file: ', logfn)
-    if fileName == '':
-        print(f'Test data: {fileNum} (built-in)')
-    else:
-        print(f'Test data: {fileNum} (from {fileName})')
-    #endif
-    tic         = time.perf_counter()
-
-    if fileName == '':
-        scores, labels, pAUCranges, descr = get_ROC_test_scores_labels_ranges(testNum)
-        print(f'Description: {descr}')
-    else:
-        try:
-            fileContent = sio.loadmat(fileName)  # handle any file not found errors naturally
-        except:
-            raise ValueError(f'File {fileName} is either not found or is not a matlab file')
-        #endtry
-        scores = fileContent['yscoreTest']
-        labels = fileContent['ytest']
-        #scores = fileContent['yscore']
-        #labels = fileContent['yhatTest']
-        #labels = fileContent['yhat']
-        if len(filePAUCranges) > 0:
-            pAUCranges = filePAUCranges
-        else:
-            pAUCranges = [[0.0, 0.33], [0.33, 0.66], [0.66, 1.0]]
-        #endif
-    #endif
-    # I have seen round-off errors in the range of approx 1.0e-16
-    print('\nThere are sometimes numerical differences due to round-off error or other \n'
-          'computational artifacts. We therefore test for equality within epsilon=1.0e-12.')
     ep = 1*(10**-12)
 
+    if ('rates' in costs) and costs['rates'] is True:
+        skew, N, P = getSkew_withRates(labels, posclass, quiet, **costs)  # **costs includes rates
+        if not quiet:
+            print(f'Skew (slope) = N * N * cFPR-cTNR = {skew:0.1f}')
+            print( '               -   -   ---------')
+            print( '               P   P   cFNR-cTPR')
+        #endif
+    else:
+        skew, N, P = getSkew(labels, posclass, quiet, **costs)            # **costs includes rates
+        if not quiet:
+            print(f'Skew (slope) = N * cFP-cTN = {skew:0.1f}')
+            print( '               -   -------')
+            print( '               P   cFN-cTP')
+        #endif
+    #endif
+    if not quiet:
+        print(' ')
+        print(f"{'N':15s} = {N}")
+        print(f"{'P':15s} = {P}")
+        print(' ')
+    #endif
+
     showThresh  = 25  # show 20 scores per plot
-    posclass    = 1   # numeric scalar
 
     # Get standard fpr, tpr, thresholds from the labels scores
     fpr, tpr, thresholds = metrics.roc_curve(labels, scores, pos_label=posclass)
+
     # data are returned, sorted in ascending order by fpr, then tpr within fpr
 
-    # sklearn tries to offer a full roc but it is insufficient:
-    #    - it only shows hidden/intermediate points with unique thresholds
-    #    - i.e., it does not show ties (e.g., try test vector #3)
-    #    - it inserts a fake threshold of max+1 at the (0,0) point, when it really should be inf or anything > max
-    #    - it sets the threshold at (1,1) to the min value, when it really should be -inf or anything <= min
-    showSklearnFullROC = False
-    if showSklearnFullROC:
-        skfpr, sktpr, skthresh = metrics.roc_curve(labels, scores, pos_label=posclass, drop_intermediate=False)
-        print('Python\'s built-in full ROC data:')
-        print('%-6s, %-6s, %-6s' % ('fpr', 'tpr', 'thresh'))
-        for x, y, t in zip(skfpr, sktpr, skthresh):
-            print(f'{x:-6.3g}, {y:-6.3g}, {t:-6.3g}')
-        # endfor
-        ac.plotSimpleROC(skfpr, sktpr, 'Sklearn Full ROC')
-    # endif
-
-    AUC = metrics.auc(fpr, tpr)
-    print(f"{'Python AUC':15s} = {AUC:0.4f}")
-
-    if ('rates' in costs) and costs['rates'] is True:
-        skew = getSkew_withRates(labels, posclass, rates, **costs)
-        print(f'Skew (slope) = N * N * cFPR-cTNR = {skew:0.1f}')
-        print( '               -   -   ---------')
-        print( '               P   P   cFNR-cTPR')
-    else:
-        skew = getSkew(labels, posclass, rates, **costs)
-        print(f'Skew (slope) = N * cFP-cTN = {skew:0.1f}')
-        print( '               -   -------')
-        print( '               P   cFN-cTP')
-    #endif
-    print(' ')
+    # note that this AUC may differ slightly from that obtained via full ROC
+    #AUC = metrics.auc(fpr, tpr) # do not use this general auc function because it sometimes gives an error:
+                                 # ValueError: x is neither increasing nor decreasing
+    #AUC  = metrics.roc_auc_score(labels, scores)
+    #if not quiet:
+    #    print(f"{'Python AUC':15s} = {AUC:0.4f}")
+    ##endif
 
     # Get and show the optimal ROC points (per Metz)
     opt_idx      = optimal_ROC_point_indices(fpr, tpr, skew)
     fpr_opt      = getListValuesByIndex(fpr, opt_idx)
     tpr_opt      = getListValuesByIndex(tpr, opt_idx)
     thresh_opt   = getListValuesByIndex(thresholds, opt_idx)
-    for fprx, tprx, threshx in zip(fpr_opt, tpr_opt, thresh_opt):
-        print(f"{'optimalROCpoint':15s} = ({fprx:0.4f},{tprx:0.4f}) at threshold: {threshx:0.4f}")
-    #endfor
 
-    if sanityCheckWholeAUC == True:
-        pAUCranges.insert(0, [0, 1])
-        indices  = np.arange(0, len(pAUCranges))    # include index 0 as wholeAUC
-    else:
-        indices  = np.arange(1, len(pAUCranges)+1)  # index 1,2,... for partial curves
+    if not quiet:
+        for fprx, tprx, threshx in zip(fpr_opt, tpr_opt, thresh_opt):
+            print(f"{'optimalROCpoint':15s} = ({fprx:0.4f},{tprx:0.4f}) at threshold: {threshx:0.4f}")
+        #endfor
     #endif
 
-    passALL = True; cDelta_sum = 0; pAUC_sum  = 0; pAUCx_sum  = 0; pAUCc_sum = 0
-    for pAUCrange, index in zip(pAUCranges, indices):
-        passEQ, cDelta, pAUCc, pAUC, pAUCx, cDeltan, pAUCcn, pAUCn, pAUCxn, extras_dict \
+    pAUCranges_copy = pAUCranges.copy()
+    if sanityCheckWholeAUC == True:
+        pAUCranges_copy.insert(0, [0, 1])
+        indices  = np.arange(0, len(pAUCranges_copy))    # include index 0 as wholeAUC
+    else:
+        indices  = np.arange(1, len(pAUCranges_copy)+1)  # index 1,2,... for partial curves
+    #endif
+    if not quiet:
+        print(f'indices: {indices}')
+    #endif
+
+    passALLeq       = True; cDelta_sum = 0; pAUC_sum  = 0; pAUCx_sum  = 0; cpAUC_sum = 0
+    resultsPerGroup = []
+
+    for pAUCrange, index in zip(pAUCranges_copy, indices):
+
+        passEQ, cDelta, cpAUC, pAUC, pAUCx, cDeltan, cpAUCn, pAUCn, pAUCxn, extras_dict \
             = ac.do_pAUCc(mode='testing',           index=index,         pAUCrange=pAUCrange,
                           labels=labels,            scores=scores,       posclass=posclass,
                           fpr=fpr,                  tpr=tpr,             thresh=thresholds,
                           fpr_opt=fpr_opt,          tpr_opt=tpr_opt,     thresh_opt=thresh_opt,
-                          numShowThresh=showThresh, testNum=fileNum,     showPlot=showPlot,
+                          numShowThresh=showThresh, testNum=testNum,     showPlot=showPlot,
                           showData=showData,        showError=showError, ep=ep,
-                          rangeAxis=rangeAxis,      useCloseRangePoint=useCloseRangePoint)
-        passALL = passALL and passEQ
+                          rangeAxis=rangeAxis,      useCloseRangePoint=useCloseRangePoint,
+                          quiet=quiet)
+
+        main_result_dict = dict(cDelta=cDelta,   cpAUC=cpAUC,   pAUC=pAUC,   pAUCx=pAUCx,
+                                cDeltan=cDeltan, cpAUCn=cpAUCn, pAUCn=pAUCn, pAUCxn=pAUCxn,
+                                passEQ=passEQ)
+        main_result_dict.update(extras_dict)
+        resultsPerGroup.append(main_result_dict)
+
+        passALLeq = passALLeq and passEQ
+
         if index > 0:
             cDelta_sum = cDelta_sum + cDelta
-            pAUCc_sum  = pAUCc_sum  + pAUCc
+            cpAUC_sum  = cpAUC_sum  + cpAUC
             pAUC_sum   = pAUC_sum   + pAUC
             pAUCx_sum  = pAUCx_sum  + pAUCx
         #endif
         if index == 0:
-            c = extras_dict['c']
+            AUC = extras_dict['AUC']
+            c   = extras_dict['c']
         #endif
     #endfor
 
     # code to check for PASS here
-    pass1 = ac.areEpsilonEqual(cDelta_sum, c,   'cDelta_sum', 'c',   ep)
-    pass2 = ac.areEpsilonEqual(pAUCc_sum,  AUC, 'pAUCc_sum',  'AUC', ep)
-    pass3 = ac.areEpsilonEqual(pAUC_sum ,  AUC, 'pAUC_sum',   'AUC', ep)
-    pass4 = ac.areEpsilonEqual(pAUCx_sum,  AUC, 'pAUCx_sum',  'AUC', ep)
-    passALL = passALL and pass1 and pass2 and pass3 and pass4
-
-    toc = time.perf_counter()
-    print(f"Analysis performed and plotted in {toc - tic:0.1f} seconds.")
-    transcript.stop()
-    return passALL
-#enddef
-
-if   useFile == True:
-    passTest = test_pAUCc(testNum=singleTestVectorNum, costs=costs,
-                          sanityCheckWholeAUC=sanityCheckWholeAUC,
-                          showPlot=showPlot, showData=showData, showError=showError,
-                          fileName=fileName, filePAUCranges=filePAUCranges,
-                          rangeAxis=rangeAxis, useCloseRangePoint=useCloseRangePoint)
-elif useSingleTestVector == True:
-        passTest = test_pAUCc(testNum=singleTestVectorNum, costs=costs,
-                          sanityCheckWholeAUC=sanityCheckWholeAUC,
-                          showPlot=showPlot, showData=showData, showError=showError)
-elif useAllTestVectors == True:
-    passAllTests = True
-    numAllTests  = 11
-    passTest     = np.zeros((numAllTests,))
-    for testNum in range(1, numAllTests+1):
-        passTest[int(testNum-1)] = \
-            test_pAUCc(testNum=testNum, costs=costs,
-                       sanityCheckWholeAUC=sanityCheckWholeAUC,
-                       showPlot=showPlot, showData=showData, showError=showError)
-        passAllTests = passAllTests and passTest[int(testNum-1)]
-    #endfor
-    i = 1
-    for result in passTest:
-        if result == True:
-            print(f"Test {i}: All results matched (passed).")
-        else:
-            print(f"Test {i}: Some results did not match (some failed).")
-        #endif
-        i = i + 1
-    #endfor
-    if passAllTests == True:
-        print(f"All results in all tests matched (passed).")
-    else:
-        print(f"Some results in tests did not match (some failed).")
+    if sanityCheckWholeAUC:
+        pass1     = ac.areEpsilonEqual(cDelta_sum, c,   'cDelta_sum', 'c',   ep, quiet)
     #endif
-#endif
+    pass2     = ac.areEpsilonEqual(cpAUC_sum,  AUC, 'cpAUC_sum',  'AUC', ep, quiet)
+    pass3     = ac.areEpsilonEqual(pAUC_sum ,  AUC, 'pAUC_sum',   'AUC', ep, quiet)
+    pass4     = ac.areEpsilonEqual(pAUCx_sum,  AUC, 'pAUCx_sum',  'AUC', ep, quiet)
+    if sanityCheckWholeAUC:
+        passALLeq = passALLeq and pass1 and pass2 and pass3 and pass4
+    else:
+        passALLeq = passALLeq and pass2 and pass3 and pass4
+    #endif
+
+    return resultsPerGroup, passALLeq
+#enddef

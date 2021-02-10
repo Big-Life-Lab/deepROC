@@ -1,6 +1,6 @@
 # do_pAUCc.py
 #
-# Copyright 2020 Ottawa Hospital Research Institute
+# Copyright 2020-2021 Ottawa Hospital Research Institute
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -23,10 +23,11 @@
 #       added calculation of standardized partial area and partial area index
 #       better annotation at the (0,0) and (1,1) points
 #       shows skew used for optimal ROC point and shows multiple optimal points
+#   Addition of discrete_deeproc_measures by Andre Carrington, 2021
 #
 # Functions:
 #    c_statistic
-#    average_measures_discrete
+#    discrete_deeproc_measures
 #    concordant_partial_AUC
 #    partial_c_statistic
 #    partial_area_index_proxy
@@ -91,37 +92,131 @@ def c_statistic(posScores, negScores):
     return c
 #enddef
 
-def average_measures_discrete(pfpr, ptpr, plabel):
+def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet):
+    '''This function computes the partial discrete measures using \n
+       "full ROC" data, i.e., which includes internal points on \n
+       horizontal, vertical and sloped emprical line segments. These \n
+       measures include: \n
+       - average balanced accuracy \n
+       - average sensitivity \n
+       - average specificity \n
+       - average accuracy \n
+       '''
     # This function requires points generated from the getFullROC function
-    sumSensFP = 0
-    sumSpecTP = 0
-    delx      = 0  # the weight or area in this case is a discrete count
-    dely      = 0  # the weight or area in this case is a discrete count
+    # All computations, sens and spec, start from the bottom left
 
-    #for fpr, tpr, label in zip(afpr, atpr, alabel):
-    for fpr, tpr, label in zip(pfpr, ptpr, plabel):
-        if label == 0 and tpr > 0:        # neg = FP. for sens: the first point has no area/weight
-            sumSensFP = sumSensFP + tpr
-            delx      = delx + 1
-        elif label == 1 and (1-fpr) > 0:  # pos = TP. for spec: the last  point has no area/weight
-            sumSpecTP = sumSpecTP + (1-fpr)
-            dely      = dely + 1
-        #endif
+    pi_neg        = N / (P+N)
+    pi_pos        = P / (P+N)
+    pi_neg_global = globalN / (globalP+globalN)
+    pi_pos_global = globalP / (globalP+globalN)
+    sumSensArea   = 0
+    sumSpecArea   = 0
+    sumPPVArea    = 0
+    sumNPVArea    = 0
+    sumLRpArea    = 0
+    sumLRnArea    = 0
+    sum_BA_Area   = 0
+    sum_A_Area    = 0
+    delx          = 0
+    dely          = 0
+    lastfpr       = float(pfpr[0])
+    lasttpr       = float(ptpr[0])
+    # omit the first point in the region, it has no area/weight
+    for fpr, tpr, label in zip(pfpr[1:], ptpr[1:], plabel[1:]):
+        ldely       =  tpr - lasttpr
+        ldelx       =  fpr - lastfpr
+
+        # temporary variables
+        avgtpr      = (tpr + lasttpr) / 2
+        avgfpr      = (fpr + lastfpr) / 2
+
+        # for bAvgA, avgSens, avgSpec
+        sumSensArea = sumSensArea +  (ldelx  * avgtpr)
+        sumSpecArea = sumSpecArea +  (ldely  * (1-avgfpr))
+
+        # for avgBA, avgA, avgPPV, avgNPV, avgLRp, avgLRn -- all using ldelw=(ldelx + ldely) an L1 distance
+        sum_BA_Area = sum_BA_Area + ((avgtpr + (1-avgfpr))/2)                    * (ldelx + ldely)
+        sum_A_Area  = sum_A_Area  + (pi_pos * avgtpr     + pi_neg * (1-avgfpr))  * (ldelx + ldely)
+        sumPPVArea  = sumPPVArea  +((pi_pos_global * avgtpr) \
+                                  / (pi_pos_global * avgtpr     + pi_neg_global * avgfpr))     * (ldelx + ldely)
+        sumNPVArea  = sumNPVArea  +((pi_neg_global * (1-avgfpr)) \
+                                  / (pi_neg_global * (1-avgfpr) + pi_pos_global * (1-avgtpr))) * (ldelx + ldely)
+        if avgfpr == 0:
+            sumLRpArea  = np.inf
+        else:
+            sumLRpArea  = sumLRpArea  + (avgtpr / avgfpr)
+        if (1-avgfpr) == 0:
+            sumLRnArea  = np.inf
+        else:
+            sumLRnArea  = sumLRnArea  + ((1-avgtpr) / (1-avgfpr))
+
+        delx    = delx + ldelx
+        dely    = dely + ldely
+        lastfpr = fpr
+        lasttpr = tpr
     #endfor
     if delx > 0:
-        avgSensFP = (1/delx) * sumSensFP
+        avgSens = (1/delx) * sumSensArea
     else:
-        avgSensFP = 0
+        # avgSens is usually defined as the average height for the partial area in the range of delx.
+        # When delx==0 there is no "area", but there are points along a vertical line where for
+        # evenly distributed points the average is halfway up the vertical line. This is acceptable
+        # for a normalized measure: avgSens = normalized (pAUC) = pAUCn; whereas the non-normalized
+        # measure pAUC requires an area and is zero otherwise.
+        avgSens = (float(ptpr[-1]) + float(ptpr[0])) / 2
+        if not quiet:
+            print('Warning: nan value included in results, remove them prior to mean/sum etc')
+        #endif
     #endif
     if dely > 0:
-        avgSpecTP = (1/dely) * sumSpecTP
+        avgSpec = (1/dely) * sumSpecArea
     else:
-        avgSpecTP = 0
+        # avgSpec is usually defined as the average width (from right) for the partial area in the range
+        # of dely.  When dely==0 there is no "area", but there are points along a horizontal line where for
+        # evenly distributed points the average is halfway across the horizontal line. This is acceptable
+        # for a normalized measure: avgSpec = normalized (pAUCx) = pAUCxn; whereas the non-normalized
+        # measure pAUCx requires an area and is zero otherwise.
+        avgSpec = (1-float(pfpr[-1]) + 1-float(pfpr[0])) / 2
+        if not quiet:
+            print('Warning: nan value included in results, remove them prior to mean/sum etc')
+        #endif
     #endif
-    return avgSensFP, avgSpecTP
+
+    bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
+    ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
+    # if   avgSens == np.nan:
+    #     bAvgA  = avgSpec  # unweighted (balanced) average of one element, is the element
+    #     ubAvgA = avgSpec  # weighted average of one element, is the element
+    # elif avgSpec == np.nan:
+    #     bAvgA  = avgSens  # unweighted (balanced) average of one element, is the element
+    #     ubAvgA = avgSens  # weighted average of one element, is the element
+    # elif avgSens == np.nan and avgSpec == np.nan:
+    #     bAvgA  = np.nan
+    #     ubAvgA = np.nan
+    # else:
+    #     bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
+    #     ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
+    # #endif
+
+    sumdel  = delx + dely
+    if sumdel == 0:
+        avgBA, avgA, avgPPV, avgNPV, avgLRp, avgLRn = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
+    else:
+        avgBA   = (1/sumdel)  * sum_BA_Area
+        avgA    = (1/sumdel)  * sum_A_Area
+        avgPPV  = (1/sumdel)  * sumPPVArea
+        avgNPV  = (1/sumdel)  * sumNPVArea
+        avgLRp  = (1/sumdel)  * sumLRpArea
+        avgLRn  = (1/sumdel)  * sumLRnArea
+    #endif
+
+    measures_dict = {'bAvgA': bAvgA, 'avgSens': avgSens, 'avgSpec': avgSpec, \
+                     'ubAvgA': ubAvgA, 'avgA': avgA, 'avgBA': avgBA, \
+                     'avgPPV': avgPPV, 'avgNPV': avgNPV, 'avgLRp': avgLRp, 'avgLRn': avgLRn}
+    return measures_dict
 #enddef
 
-def concordant_partial_AUC(pfpr, ptpr):
+def concordant_partial_AUC(pfpr, ptpr, quiet):
     ''' Computes the concordant partial area under the curve and alternatives, given arrays of \n
     "partial fpr" and "partial tpr" values.  These arrays only contain points on the partial curve \n
     and the trapezoidal rule is used to compute areas with these points. \n
@@ -148,10 +243,17 @@ def concordant_partial_AUC(pfpr, ptpr):
     horizontal_stripe_area = (dely * 1)
 
     if delx == 0:
-        print("Warning: For pAUC and pAUCc the width (delx) of the vertical column is zero.")
-        pAUC  = 0
-        pAUCn = 0
-        sPA   = 0
+        if not quiet:
+            print("Warning: For pAUC and pAUCc the width (delx) of the vertical column is zero.")
+        #endif
+        pAUC  = 0       # contribution to AUC from pAUC is zero, for region with no width or area
+
+        # avgSens is usually defined as the average height for the partial area in the range of delx.
+        # When delx==0 there is no "area", but there are points along a vertical line where for
+        # evenly distributed points the average is halfway up the vertical line. This is acceptable
+        # for a normalized measure: avgSens = normalized (pAUC) = pAUCn; whereas the non-normalized
+        # measure pAUC requires an area and is zero otherwise.
+        pAUCn = (f+g)/2
     else:
         # Compute the partial AUC mathematically defined in (Dodd and Pepe, 2003) and conceptually defined in
         #   (McClish, 1989; Thompson and Zucchini, 1989). Use the trapezoidal rule to compute the integral.
@@ -160,9 +262,17 @@ def concordant_partial_AUC(pfpr, ptpr):
     #endif
 
     if dely == 0:
-        print("Warning: For pAUCx and pAUCc the height (dely) of the horizontal stripe is zero.")
-        pAUCx  = 0
-        pAUCxn = 0
+        if not quiet:
+            print("Warning: For pAUCx and pAUCc the height (dely) of the horizontal stripe is zero.")
+        #endif
+        pAUCx  = 0       # contribution to AUC from pAUC is zero, for region with no height or area
+
+        # pAUCxn (avgSpec) is usually defined as the average width (from right) for the partial area in the range
+        # of dely.  When dely==0 there is no "area", but there are points along a horizontal line where for
+        # evenly distributed points the average is halfway across the horizontal line. This is acceptable
+        # for a normalized measure: avgSpec = normalized (pAUCx) = pAUCxn; whereas the non-normalized
+        # measure pAUCx requires an area and is zero otherwise.
+        pAUCxn = (1-a+1-b)/2
     else:
         # Compute the horizontal partial AUC (pAUCx) defined in (Carrington et al, 2020) and as
         # suggested by (Walter, 2005) and similar to the partial area index (PAI)
@@ -181,29 +291,25 @@ def concordant_partial_AUC(pfpr, ptpr):
         pAUCxn = pAUCx / horizontal_stripe_area
     #endif
 
-    total_for_norm = vertical_stripe_area + horizontal_stripe_area
-    if total_for_norm == 0:
-        pAUCc  = 0
-        pAUCcn = 0
-        print('Warning: Zero length partial curve specified.')
-    else:
-        pAUCc  = (1/2)*pAUCx + (1/2)*pAUC  # the complexity is in the derivation, meaning/generalization
-        #   and relation to the c and partial c statistic, not the
-        #   formula which looks like a simple average
-        #pAUCcn= (pAUCx + pAUC) / total_for_norm
-        if vertical_stripe_area > 0 and horizontal_stripe_area > 0: # NEW part-wise normalization
-            pAUCcn = (1 / 2) * (pAUC  / vertical_stripe_area) + (1 / 2) * (pAUCx / horizontal_stripe_area)
-        elif vertical_stripe_area   == 0:
-            pAUCcn = (1 / 2) * (pAUCx / horizontal_stripe_area)
-        elif horizontal_stripe_area == 0:
-            pAUCcn = (1 / 2) * (pAUC  / vertical_stripe_area)
-        # endif
-    #endif
+    pAUCc  = (1/2)*pAUCx + (1/2)*pAUC  # the complexity is in the derivation, meaning/generalization
+                                       #   and relation to the c and partial c statistic, not the
+                                       #   formula which looks like a simple average
+
+    # OLD overall normalization:
+    #total_for_norm = vertical_stripe_area + horizontal_stripe_area
+    #if total_for_norm == 0:
+    #    pAUCcn = 0
+    #    print('Warning: Zero length partial curve specified.')
+    #else:
+    # pAUCcn= (pAUCx + pAUC) / total_for_norm
+
+    # NEW piece-wise normalization:
+    pAUCcn = (1/2) * pAUCn + (1/2) * pAUCxn
 
     return pAUCc, pAUC, pAUCx, pAUCcn, pAUCn, pAUCxn
 #enddef
 
-def partial_c_statistic(posScores, negScores, posWeights, negWeights):
+def partial_c_statistic(posScores, negScores, posWeights, negWeights, posHeights, negWidths):
     ''' partial_c_statistic computes the cStatistic given a vector of scores for actual
         positives and a vector of scores for actual negatives in the ROC data and
         corresponding weight vectors with elements in [0,1] that indicate which instances
@@ -212,39 +318,58 @@ def partial_c_statistic(posScores, negScores, posWeights, negWeights):
         and exterior instances will have weight 0'''
     P      = len(posScores)
     N      = len(negScores)
-    Pw     = float(sum(posWeights))
-    Nw     = float(sum(negWeights))
+
+    # OLD method: does not work for ties
+    partP  = float(sum(posWeights))
+    partN  = float(sum(negWeights))
+    # NEW method: lazily use additional inputs
+    # partP  = (yrange[1]-yrange[0]) * P
+    # partN  = (xrange[1]-xrange[0]) * N
     cp     = 0
     cn     = 0
     cLocal = 0
     for j in range(0, P):
         for k in range(0, N):
             h      = Heaviside(float(posScores[j]) - float(negScores[k]))
+            # OLD:
             cp     = cp     + float(posWeights[j]) * h
             cn     = cn     + float(negWeights[k]) * h
-            cLocal = cLocal + float(posWeights[j]) * float(negWeights[k]) * h
+            # NEW:
+            # cp     = cp     + float(posWeights[j]) * float(posHeights[j]) * h
+            # cn     = cn     + float(negWeights[k]) * float(negWidths[k])  * h
+
+            cLocal = cLocal + float(posWeights[j]) * \
+                              float(negWeights[k]) * h
         #endfor
     #endfor
-    cDelta  = cp/(2*P*N)  + cn/(2*P*N)
-    #cDeltan= (cDelta * (2*P*N)) / ((N*Pw) + (P*Nw))  # OLD overall normalization
-    if   Pw > 0 and Nw > 0:
-        cDeltan = cp/(2*N*Pw) + cn/(2*P*Nw)           # NEW part-wise normalization
-    elif Pw == 0:
-        cDeltan = cn/(2*P*Nw)
-    elif Nw == 0:
-        cDeltan = cp/(2*N*Pw)
+    whole_area             = N * P
+    cDelta      = (1/2)*(cp/whole_area) + (1/2)*(cn/whole_area)
+    horizontal_stripe_area = N * partP
+    vertical_stripe_area   = P * partN
+    # OLD overall normalization:
+    # cDeltan= (cDelta * (2*whole_area)) / (horizontal_stripe_area + vertical_stripe_area)
+    # NEW piece-wise normalization:
+    if   partP == 0 and partN == 0:
+        cDeltan = np.nan
+    elif partP == 0:
+        cDeltan = (cn/vertical_stripe_area)
+    elif partN == 0:
+        cDeltan = (cp/horizontal_stripe_area)
+    else:
+        cDeltan = (1/2) * (cp/horizontal_stripe_area) + (1/2) * (cn/vertical_stripe_area)
     #endif
 
-    if Pw*Nw == 0:
-        cLocal = 0
-    else:
-        cLocal = cLocal / (Pw*Nw)
-    #endif
+    #local_area = partP * partN
+    #if local_area == 0:
+    #    cLocal = 0
+    #else:
+    #    cLocal = cLocal / local_area
+    ##endif
 
     return cDelta, cDeltan, cLocal
 #enddef
 
-def partial_area_index_proxy(pfpr, ptpr):
+def partial_area_index_proxy(pfpr, ptpr, quiet):
     # this is not the full binormal curve fit version of Jiang et al.'s partial area index
     # it is instead a proxy for that using the simpler definition of the area to the right of a curve
 
@@ -262,8 +387,10 @@ def partial_area_index_proxy(pfpr, ptpr):
     #endif
 
     if dely_PAI == 0:
-        print(" Warning: For PAI the height (dely) of the horizontal stripe is zero.")
-        PAI = 0
+        if not quiet:
+            print(" Warning: For PAI the height (dely) of the horizontal stripe is zero.")
+        #endif
+        PAI = (1-float(pfpr[0]) + 0)/2  # average specificity on horizontal line
     else:
         # Compute the partial area index (PAI) (Nishikawa et al, ?) similar to pAUCx, but with a
         # fixed right boundary. Compute the area to the right of the curve, the horizontal integral,
@@ -281,7 +408,7 @@ def partial_area_index_proxy(pfpr, ptpr):
     return PAI
 #enddef
 
-def standardized_partial_area_proxy(pfpr, ptpr):
+def standardized_partial_area_proxy(pfpr, ptpr, quiet):
     # this is not the full binormal curve fit version of McClish's sPA
     # it is instead a proxy for that using a simpler definition
     '''
@@ -300,8 +427,12 @@ def standardized_partial_area_proxy(pfpr, ptpr):
     horizontal_stripe_area = (dely * 1)
 
     if delx == 0:
-        print("Warning: For sPA the width of the region is zero.")
-        sPA   = 0
+        if not quiet:
+            print("Warning: For sPA the width of the region is zero.")
+        #endif
+        # for a vertical line segment, take the avg height, subtract the height at the diagonal, normalize
+        # by 1 less the height at the diagonal
+        sPA = (((f+g)/2)-a) / (1-a)
     else:
         # Compute the standardized partial area (sPA) defined in (McClish, 2006), with a correction.
         # McClish calls Atrapezoid: Amin, but McClish erroneously swapped the Amin & Amax formulas
@@ -369,7 +500,7 @@ def get_Match_or_Interpolation_Points(rstat, endpoint):
     return ix, ixL, ixR
 #enddef
 
-def getRange_pAUCc(ffpr, ftpr, fthresh, rangeAxis1, rangeEndpoints1, rocRuleLeft, rocRuleRight):
+def getRange_pAUCc(ffpr, ftpr, fthresh, rangeAxis1, rangeEndpoints1, rocRuleLeft, rocRuleRight, quiet):
     #                                   FPR or TPR; in FPR or TPR;
     ''' returns pfpr, ptpr, rangeEndpoints2, rangeEndpoints0, rangeIndices0 \n
     # \n
@@ -434,7 +565,8 @@ def getRange_pAUCc(ffpr, ftpr, fthresh, rangeAxis1, rangeEndpoints1, rocRuleLeft
             else:
                 approxIndices0[i] = ixL
             #endif
-            print(f'Interpolating {rangeAxis1}[{i}] between {rstat[ixL]:0.3f} and {rstat[ixR]:0.3f}')
+            if not quiet:
+                print(f'Interpolating {rangeAxis1}[{i}] between {rstat[ixL]:0.3f} and {rstat[ixR]:0.3f}')
             #   with a newly interpolated point at rangeEndpoints0
             if rangeAxis1 == FPR:
                 if i == 1:    # right/top
@@ -490,7 +622,7 @@ def getRange_pAUCc(ffpr, ftpr, fthresh, rangeAxis1, rangeEndpoints1, rocRuleLeft
     return pfpr, ptpr, rangeEndpoints2, rangeEndpoints0, rangeIndices0, approxIndices0
 # enddef
 
-def getRange_cDelta(ffpr, ftpr, fthresh, scores, labels, posclass, xrange, yrange):
+def getRange_cDelta(ffpr, ftpr, fthresh, fSlopeFactor, scores, labels, posclass, xrange, yrange):
     '''
     # returns: negIndexC, posIndexC, negScores, posScores, negWeights, posWeights \n
     # \n
@@ -540,17 +672,23 @@ def getRange_cDelta(ffpr, ftpr, fthresh, scores, labels, posclass, xrange, yrang
     # we could convert these to lists, but we don't need to: scores = list(scores)
 
     # get the positive instances (their scores) along the TPR axis
+    # also get the height travelled by each instance in a sloped segment
     posIdx     = np.argwhere(np.array(newlabels) == 1).flatten()
     posScores  = []
+    posHeights = []
     for ix in posIdx:
-        posScores = posScores + [scores[ix]]
+        posScores  = posScores  + [scores[ix]]
+        posHeights = posHeights + [fSlopeFactor[ix]]
     #endfor
 
     # get the negative instances (their scores) along the FPR axis
+    # also get the width travelled by each instance in a sloped segment
     negIdx     = np.argwhere(np.array(newlabels) == 0).flatten()
     negScores  = []
+    negWidths  = []
     for ix in negIdx:
         negScores = negScores + [scores[ix]]
+        negWidths = negWidths + [1-fSlopeFactor[ix]]
     #endfor
 
     # initialize pos and neg indices and weights
@@ -608,8 +746,28 @@ def getRange_cDelta(ffpr, ftpr, fthresh, scores, labels, posclass, xrange, yrang
     posWeights[0: int(posIndexC[0])]        = 0  # zeroize below bottom boundary
     posWeights[int(posIndexC[1])+1: ptotal] = 0  # zeroize above top boundary
 
-    return negIndexC, posIndexC, negScores, posScores, negWeights, posWeights
+    return negIndexC, posIndexC, negScores, posScores, negWeights, posWeights, negWidths, posHeights
 # enddef
+
+def sortScoresFixLabels(scores, labels, posclass, ascending):
+    # use newlabels to make sure the positive class has a higher label value
+    newlabels = makeLabels01(labels, posclass)
+
+    # sort in descending order by scores, then by newlabels (within tied scores)
+    # (we must do this ascending, and then reverse it)
+    dtype     = [('scores', float), ('newlabels', int), ('labels', int)]  # assumes labels are int
+    rocTuples = list(zip(scores, newlabels, labels))
+    rocArray  = np.array(rocTuples, dtype=dtype)
+    temp      = np.sort(rocArray,   order=['scores', 'newlabels'])
+    if ascending:
+        scores, newlabels, labels = zip(*temp)
+    else:
+        final = temp[::-1]        # reverse it
+        # put the sorted data back into the original list variables
+        scores, newlabels, labels = zip(*final)
+    #endif
+    return scores, newlabels, labels
+#enddef
 
 def getFullROC(labels, scores, posclass):
     # Get the "full" set of points in an ROC curve that correspond to each
@@ -619,7 +777,7 @@ def getFullROC(labels, scores, posclass):
     #
     # What are skipped points? In the standard empirical ROC procedure, which
     # creates a staircase plot, if an ROC curve "stair" ascends 3 times,
-    # or moves horizontally 4 times, or moves diagonally (tied scores) 3 times,
+    # or moves horizontally 4 times, or moves along a slope (tied scores) 3 times,
     # then these intermediary points are not included in the "standard" ROC
     # procedure, with one small exception: points adjacent to (0,0) and (1,1).
     #
@@ -638,32 +796,25 @@ def getFullROC(labels, scores, posclass):
     #
     # In variable names, the letter "f" represents "full": e.g., ffpr, ftpr.
 
-    # use newlabels to make sure the positive class has a higher label value
-    newlabels = makeLabels01(labels, posclass)
+    scores, newlabels, labels = sortScoresFixLabels(scores, labels, posclass, False) # False = descending
 
-    # sort in descending order by scores, then by newlabels (within tied scores)
-    # (we must do this ascending, and then reverse it)
-    dtype     = [('scores', float), ('newlabels', int), ('labels', int)]  # assumes labels are int
-    rocTuples = list(zip(scores, newlabels, labels))
-    rocArray  = np.array(rocTuples, dtype=dtype)
-    temp      = np.sort(rocArray,   order=['scores', 'newlabels'])
-    final     = temp[::-1]        # reverse it
-    # put the sorted data back into the original list variables
-    scores, newlabels, labels = zip(*final)
-
-    n          = len(labels)+1  # +1 for the (0,0) point
-    finalIndex = n - 1
-    blank      = np.zeros(n)
-    ffpr, ftpr, fthresh = (blank.copy(), blank.copy(), blank.copy())
-    fnewlabel  = np.array(newlabels)
+    n             = len(labels)+1  # +1 for the (0,0) point
+    finalIndex    = n - 1
+    blank         = np.zeros(n)
+    ffpr          = blank.copy()
+    ftpr          = blank.copy()
+    fthresh       = blank.copy()
+    fSlopeFactor  = np.ones(n).copy()
+    fnewlabel     = np.array(newlabels)
 
     # for score, newlabel, label in zip(scores, newlabels, labels)
-    thisFP  = 0
-    thisTP  = 0
-    numTP   = len(np.where(np.array(newlabels) == 1)[0])
-    numFP   = len(np.where(np.array(newlabels) == 0)[0])
-    tPrev   = math.inf   # previous threshold
+    thisFP        = 0
+    thisTP        = 0
+    numTP         = len(np.where(np.array(newlabels) == 1)[0])
+    numFP         = len(np.where(np.array(newlabels) == 0)[0])
+    tPrev         = math.inf   # previous threshold
     numTies       = 0
+    numPosTies    = 0
     firstTieIndex = 0
 
     def addStandardROCpoint(ffpr, ftpr, fthresh, thisTP, thisFP, index, tPrev):
@@ -673,24 +824,42 @@ def getFullROC(labels, scores, posclass):
         return ffpr, ftpr, fthresh
     #enddef
 
-    def addROCtie(ffpr, ftpr, fthresh, index, tPrev, numTies, firstTieIndex):
+    def addROCtie(ffpr, ftpr, fthresh, fSlopeFactor, index, tPrev, numTies, numPosTies, firstTieIndex):
         rise = ftpr[index] - ftpr[firstTieIndex-1]  # incl. point before
         run  = ffpr[index] - ffpr[firstTieIndex-1]  # incl. point before
+        if rise > 0 and run > 0:  # if ties cause a sloped ROC line segment
+            # then capture the slope of the line segment, by its rise and run,
+            # for each instance along the segment
+            thisRise  = numPosTies / numTies
+            # thisRun = 1 - thisRise
+            # i.e., whereas non-sloped segments travel 1 instance unit along only 1 of the axes
+            # a sloped segment travels thisRise (or fRise) units along the y-axis and thisRun
+            # units along the x-axis.
+        else:
+            thisRise  = 1
+        #endif
         for i in np.arange(0, numTies):
-            ftpr[firstTieIndex + i]    = ftpr[firstTieIndex-1] + rise * ((i+1) / numTies)
-            ffpr[firstTieIndex + i]    = ffpr[firstTieIndex-1] + run  * ((i+1) / numTies)
-            fthresh[firstTieIndex + i] = tPrev
+            ftpr[firstTieIndex + i]         = ftpr[firstTieIndex-1] + rise * ((i+1) / numTies)
+            ffpr[firstTieIndex + i]         = ffpr[firstTieIndex-1] + run  * ((i+1) / numTies)
+            fthresh[firstTieIndex + i]      = tPrev
+            # Notably, the slope factor is only stored for points along a sloped line segment
+            # otherwise it defaults to a factor of 1 (no effect).
+            # Also, the slope factor indicates the slope of the line before the current point
+            # so the first point takes the default value
+            if i > 0:
+                fSlopeFactor[firstTieIndex + i] = thisRise
+            #endif
         # endfor
-        return ffpr, ftpr, fthresh
+        return ffpr, ftpr, fthresh, fSlopeFactor
     #enddef
 
     index = 0  # index of all/full ROC points including hidden ties
     # add (0,0) point
     ffpr, ftpr, fthresh = addStandardROCpoint(ffpr, ftpr, fthresh, thisTP, thisFP, index, tPrev)
-    np.insert(fnewlabel, 0, -1)
+    fnewlabel = np.insert(fnewlabel, 0, -1)
     index = 1
 
-    for score, newlabel, label in final:
+    for score, newlabel in zip(scores, newlabels):
         # we move an imaginary threshold (thresh) from the highest to lowest score
         # which is left to right in ROC, from the all negative threshold at (0,0)
         # to the all positive threshold at (1,1)
@@ -716,26 +885,35 @@ def getFullROC(labels, scores, posclass):
         tied_w_prev = (score == tPrev)
         if   not tied_w_prev and not tied_w_next:   # (b) not a tie
             ffpr, ftpr, fthresh = addStandardROCpoint(ffpr, ftpr, fthresh, thisTP, thisFP, index, score)
-            tPrev   = score       # set previous threshold for next iteration to current score
-            numTies = 0
+            tPrev       = score       # set previous threshold for next iteration to current score
+            numTies     = 0
+            numPosTies  = 0
         elif not tied_w_prev and     tied_w_next:   # (c) new tie
             ffpr, ftpr, fthresh = addStandardROCpoint(ffpr, ftpr, fthresh, thisTP, thisFP, index, score)
             firstTieIndex = index
-            numTies = 1
-            tPrev   = score       # set previous threshold for next iteration to current score
+            numTies     = 1
+            if newlabel == 1:
+                numPosTies = 1
+            tPrev       = score       # set previous threshold for next iteration to current score
         elif     tied_w_prev and     tied_w_next:   # (d) middle tie
-            numTies = numTies + 1
+            numTies     = numTies + 1
+            if newlabel == 1:
+                numPosTies = numPosTies + 1
         elif     tied_w_prev and not tied_w_next:   # (e) last tie (in current series)
             ffpr, ftpr, fthresh = addStandardROCpoint(ffpr, ftpr, fthresh, thisTP, thisFP, index, score)
-            numTies = numTies + 1
-            ffpr, ftpr, fthresh = addROCtie(ffpr, ftpr, fthresh, index, score, numTies, firstTieIndex)
+            numTies     = numTies + 1
+            if newlabel == 1:
+                numPosTies = numPosTies + 1
+            ffpr, ftpr, fthresh, fSlopeFactor = addROCtie(ffpr, ftpr, fthresh, fSlopeFactor, index, score,
+                                                          numTies, numPosTies, firstTieIndex)
         #endif
         index = index + 1  # increment index for next iteration
     #endfor
-    ffpr    = ffpr[:index+1].copy()
-    ftpr    = ftpr[:index+1].copy()
-    fthresh = fthresh[:index+1].copy()
-    return ffpr, ftpr, fthresh, fnewlabel
+    ffpr         = ffpr[:index+1].copy()
+    ftpr         = ftpr[:index+1].copy()
+    fthresh      = fthresh[:index+1].copy()
+    fSlopeFactor = fSlopeFactor[:index+1].copy()
+    return ffpr, ftpr, fthresh, fnewlabel, fSlopeFactor
 #enddef
 
 def get_cMatrix_Label_Size_Fontsize(val):
@@ -1076,7 +1254,9 @@ def rocErrorCheck(fpr,tpr,thresh,rangeEndpoints1,rangeAxis,rocRuleLeft,rocRuleRi
     if len(thresh) < 2:
         raise ValueError('There must be at least 2 points in fpr, tpr, thresholds')
     if rangeEndpoints1[0] >= rangeEndpoints1[1] or len(rangeEndpoints1) != 2:
-        raise ValueError('Improper range: wrong length or reversed order')
+        pass
+        # this is not necessarily an error, allow it instead of raising an error
+        # raise ValueError(f'Improper range: wrong length or reversed order {rangeEndpoints1}')
     if rangeEndpoints1[0] < 0 or rangeEndpoints1[0] > 1 \
             or rangeEndpoints1[1] < 0 or rangeEndpoints1[1] > 1:
         raise ValueError('Improper range: it must be in [0, 1]')
@@ -1104,14 +1284,23 @@ def cErrorCheck(cRuleLeft, cRuleRight):
     return
 #enddef
 
-def areEpsilonEqual(a, b, atext, btext, ep):
+def areEpsilonEqual(a, b, atext, btext, ep, quiet):
     ''' check equality with allowance for round-off errors up to epsilon '''
+    if   a == np.nan and b == np.nan:
+        return True
+    elif a == np.nan or  b == np.nan:
+        return False
+    #endif
     fuzzyEQ = lambda a, b, ep: (np.abs(a - b) < ep)
     if fuzzyEQ(a, b, ep):
-        print(f"PASS: {atext:12s} ({a:0.4f}) {'matches':<14s} {btext:<12s} ({b:0.4f})")
+        if not quiet:
+            print(f"PASS: {atext:12s} ({a:0.4f}) {'matches':<14s} {btext:<12s} ({b:0.4f})")
+        #endif
         return True
     else:
-        print(f"FAIL: {atext:12s} ({a:0.4f}) {'does not match':<14s} {btext:<12s} ({b:0.4f})")
+        if not quiet:
+            print(f"FAIL: {atext:12s} ({a:0.4f}) {'does not match':<14s} {btext:<12s} ({b:0.4f})")
+        #endif
         return False
     #endif
 #enddef
@@ -1128,40 +1317,49 @@ def Heaviside(x):
     #endif
 #enddef
 
-def get_plabel(fnewlabel, matchedIndices, approxIndices):
+def get_plabel(fnewlabel, matchedIndices, approxIndices, quiet):
     if matchedIndices[0] == 'NA':
-        print('Warning: for avgBA using an approximate left  label (no interpolation)')
+        if not quiet:
+            print('Warning: for avgBA using an approximate left  label (no interpolation)')
         left = approxIndices[0]
     else:
         left = matchedIndices[0]
     #endif
     if matchedIndices[1] == 'NA':
-        print('Warning: for avgBA using an approximate right label (no interpolation)')
+        if not quiet:
+            print('Warning: for avgBA using an approximate right label (no interpolation)')
         right = approxIndices[1]
     else:
         right = matchedIndices[1]
-    # endif
-    return fnewlabel[left:right]
+    #endif
+    if (right + 1) > len(fnewlabel):
+        return fnewlabel[left:]
+    else:
+        return fnewlabel[left:(right+1)]
+    #endif
 #enddef
 
-def do_pAUCc(mode,          index,     pAUCrange,
-             labels,        scores,    posclass,
-             fpr,           tpr,       thresh,
-             fpr_opt,       tpr_opt,   thresh_opt,
-             numShowThresh, testNum,   showPlot,
-             showData,      showError, ep,
-             rangeAxis,     useCloseRangePoint):
+def do_pAUCc(mode='',          index=1,         pAUCrange=[],
+             labels=[],        scores=[],       posclass=1,
+             fpr=[],           tpr=[],          thresh=[],
+             fpr_opt=[],       tpr_opt=[],      thresh_opt=[],
+             numShowThresh=30, testNum='###',   showPlot=False,
+             showData=False,   showError=False, ep=1*(10**-12),
+             rangeAxis='FPR',  useCloseRangePoint=False,
+             quiet=False):
 
     ''' insert docstring here '''
     # STATUS: INCOMPLETE
 
     if index == 0:
-        print(f'\n{index}. Whole curve baseline check\n')
+        if not quiet:
+            print(f'\n{index}. Whole curve baseline check\n')
+        #endif
         plotTitle = f'ROC curve in {mode}'
         matrixTitle = f'Concordance matrix in {mode}'
 
         # Show the standard ROC data
-        if showData:
+        if showData and not quiet:
             print('Python\'s built-in standard ROC data')
             print(f"{'fpr':6s}, {'tpr':6s}, {'thresh':6s}")
             for x, y, t in zip(fpr, tpr, thresh):
@@ -1185,7 +1383,9 @@ def do_pAUCc(mode,          index,     pAUCrange,
             # plt.close(fig)
         # endif
     else:
-        print(f'\n{index}. Partial curve {index}\n')
+        if not quiet:
+            print(f'\n{index}. Partial curve {index}\n')
+        #endif
         plotTitle   = f'Partial ROC curve {index} in {mode}'
         matrixTitle = f'Concordance matrix part {index} in {mode}'
     #endif
@@ -1196,11 +1396,11 @@ def do_pAUCc(mode,          index,     pAUCrange,
     #   1) for the partial c statistic
     #   2) to show all thresholds in an ROC for decision-making
     #   NOTE: It is NOT necessary for the concordant partial AUC
-    ffpr, ftpr, fthresh, fnewlabel = getFullROC(labels, scores, posclass)
+    ffpr, ftpr, fthresh, fnewlabel, fSlopeFactor = getFullROC(labels, scores, posclass)
     # data are returned, sorted in ascending order by fpr, then tpr within fpr
 
     # Show the full ROC data
-    if showData:
+    if showData and not quiet:
         print(f"{'ffpr':6s}, {'ftpr':6s}, {'fthresh':7s}")
         for x, y, t in zip(ffpr, ftpr, fthresh):
             print(f'{x:-6.3g}, {y:-6.3g}, {t:-6.3g}')
@@ -1272,7 +1472,7 @@ def do_pAUCc(mode,          index,     pAUCrange,
 
     # get range and rangeIndices for pAUCc, using full ROC data
     pfpr, ptpr, otherpAUCrange, trange, matchedIndices, approxIndices \
-        = getRange_pAUCc(ffpr, ftpr, fthresh, rangeAxis, pAUCrange, rocRuleLeft, rocRuleRight)
+        = getRange_pAUCc(ffpr, ftpr, fthresh, rangeAxis, pAUCrange, rocRuleLeft, rocRuleRight, quiet)
     if rangeAxis == 'FPR':
         xrange = pAUCrange
         yrange = otherpAUCrange
@@ -1282,10 +1482,10 @@ def do_pAUCc(mode,          index,     pAUCrange,
     #endif
     #xrange = pAUCrange
     #pfpr, ptpr, yrange, trange, matchedIndices, approxIndices \
-    #    = getRange_pAUCc(ffpr, ftpr, fthresh, 'FPR', xrange, rocRuleLeft, rocRuleRight)
+    #    = getRange_pAUCc(ffpr, ftpr, fthresh, 'FPR', xrange, rocRuleLeft, rocRuleRight, quiet)
 
     # Show the partial ROC data
-    if showData:
+    if showData and not quiet:
         print(f"{'pfpr':6s}, {'ptpr':6s}")
         for x, y in zip(pfpr, ptpr):
             print(f'{x:-6.3g}, {y:-6.3g}')
@@ -1294,8 +1494,8 @@ def do_pAUCc(mode,          index,     pAUCrange,
     #endif
 
     # get range and rangeIndices for cDelta, using full ROC data
-    negIndexC, posIndexC, negScores, posScores, negWeights, posWeights \
-        = getRange_cDelta(ffpr, ftpr, fthresh, scores, labels, posclass, xrange, yrange)
+    negIndexC, posIndexC, negScores, posScores, negWeights, posWeights, negWidths, posHeights \
+        = getRange_cDelta(ffpr, ftpr, fthresh, fSlopeFactor, scores, labels, posclass, xrange, yrange)
 
     # plot full ROC data for whole and partial curve
     # with thresholds labeled and the Metz optimal ROC point(s) indicated
@@ -1330,98 +1530,156 @@ def do_pAUCc(mode,          index,     pAUCrange,
         fig.savefig(f'output/cMatrix_{modeShort}_{testNum}-{index}.png')
     #endif
 
-    print(f"{'FPR':12s} = [{xrange[0]:0.3f} {xrange[1]:0.3f}]")
-    print(f"{'TPR':12s} = [{yrange[0]:0.3f} {yrange[1]:0.3f}]")
-    if np.isinf(trange[0]):
-        print(f"{'Thresholds':12s} = [{'inf':<5s} {trange[1]:0.3f}]")
-    else:
-        print(f"{'Thresholds':12s} = [{trange[0]:0.3f} {trange[1]:0.3f}]")
-    #endif
+    if not quiet:
+        print(f"{'FPR':12s} = [{xrange[0]:0.3f} {xrange[1]:0.3f}]")
+        print(f"{'TPR':12s} = [{yrange[0]:0.3f} {yrange[1]:0.3f}]")
 
-    print(f"{' ':29s} {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}      {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}")
-    if np.isinf(trange[0]):
-        print(f"{'rocLeftRight':<12s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
-              f"({xrange[0]:0.4f},{yrange[0]:0.4f},{'inf':<6s}) to "
-              f"({xrange[1]:0.4f},{yrange[1]:0.4f},{trange[1]:0.4f})")
-    else:
-        print(f"{'rocLeftRight':<12s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
-              f"({xrange[0]:0.4f},{yrange[0]:0.4f},{trange[0]:0.4f}) to "
-              f"({xrange[1]:0.4f},{yrange[1]:0.4f},{trange[1]:0.4f})")
+        if np.isinf(trange[0]):
+            print(f"{'Thresholds':12s} = [{'inf':<5s} {trange[1]:0.3f}]")
+        else:
+            print(f"{'Thresholds':12s} = [{trange[0]:0.3f} {trange[1]:0.3f}]")
+        #endif
+
+        print(f"{' ':29s} {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}      {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}")
+        if np.isinf(trange[0]):
+            print(f"{'rocLeftRight':<12s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
+                  f"({xrange[0]:0.4f},{yrange[0]:0.4f},{'inf':<6s}) to "
+                  f"({xrange[1]:0.4f},{yrange[1]:0.4f},{trange[1]:0.4f})")
+        else:
+            print(f"{'rocLeftRight':<12s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
+                  f"({xrange[0]:0.4f},{yrange[0]:0.4f},{trange[0]:0.4f}) to "
+                  f"({xrange[1]:0.4f},{yrange[1]:0.4f},{trange[1]:0.4f})")
+        #endif
+        print(' ')
     #endif
-    print(' ')
 
     p1 = int(posIndexC[0]); p2 = int(posIndexC[1])
     n1 = int(negIndexC[0]); n2 = int(negIndexC[1])
-    print(f"{'positive indices':16s} = [{p1:2d} {p2:2d}]")
-    print(f"{'negative indices':16s} = [{n1:2d} {n2:2d}]")
 
-    print(f"{' ':29s} {'nScore':<6s}  {'ix':<4s},  {'pScore':<6s}  {'ix':<4s}       "
-                    f"{'nScore':<6s}  {'ix':<4s},  {'pScore':<6s}  {'ix':<4s}")
-    print(f"{'rocLeftRight':<12s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
-          f"({negScores[n1]:0.4f} ({n1:4d}), {posScores[p1]:0.4f} ({p1:4d})) to "
-          f"({negScores[n2]:0.4f} ({n2:4d}), {posScores[p2]:0.4f} ({p2:4d}))")
-    print(f"with weights: {' ':16s}"
-          f"{float(negWeights[n1]):0.4f}{' ':9s}{float(posWeights[p1]):0.4f}{' ':13s}"
-          f"{float(negWeights[n2]):0.4f}{' ':9s}{float(posWeights[p2]):0.4f}")
-    print(' ')
+    if not quiet:
+        print(f"{'positive indices':16s} = [{p1:2d} {p2:2d}]")
+        print(f"{'negative indices':16s} = [{n1:2d} {n2:2d}]")
+    
+        print(f"{' ':29s} {'nScore':<6s}  {'ix':<4s},  {'pScore':<6s}  {'ix':<4s}       "
+                        f"{'nScore':<6s}  {'ix':<4s},  {'pScore':<6s}  {'ix':<4s}")
+        print(f"{'rocLeftRight':<12s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
+              f"({negScores[n1]:0.4f} ({n1:4d}), {posScores[p1]:0.4f} ({p1:4d})) to "
+              f"({negScores[n2]:0.4f} ({n2:4d}), {posScores[p2]:0.4f} ({p2:4d}))")
+        print(f"with weights: {' ':16s}"
+              f"{float(negWeights[n1]):0.4f}{' ':9s}{float(posWeights[p1]):0.4f}{' ':13s}"
+              f"{float(negWeights[n2]):0.4f}{' ':9s}{float(posWeights[p2]):0.4f}")
+        print(' ')
+    #endif
 
     extras_dict = dict()
     if index == 0:
         c   = c_statistic(posScores, negScores)
-        print(f"{'c':12s} = {c:0.4f}")
-        print(' ')
+        if not quiet:
+            print(f"{'c':12s} = {c:0.4f}")
+            print(' ')
+        #endif
         extras_dict.update({'c': c})
     #endif
 
     cDelta, cDeltan, cLocal \
-        = partial_c_statistic(posScores, negScores, posWeights, negWeights)
-    print(f"{'cDelta':12s} = {cDelta:0.4f}")
-    print(f"{'cDeltan':12s} = {cDeltan:0.4f}")
-    print(f"{'cLocal':12s} = {cLocal:0.4f}")
-    print(' ')
+        = partial_c_statistic(posScores, negScores, posWeights, negWeights, posHeights, negWidths)
+    if not quiet:
+        print(f"{'cDelta':12s} = {cDelta:0.4f}")
+        print(f"{'cDeltan':12s} = {cDeltan:0.4f}")
+        print(f"{'cLocal':12s} = {cLocal:0.4f}")
+        print(' ')
+    #endif
+
+    cpAUC, pAUC, pAUCx, cpAUCn, pAUCn, pAUCxn \
+        = concordant_partial_AUC(pfpr, ptpr, quiet)
 
     if index == 0:
-        AUC = metrics.auc(fpr, tpr)
-        print(f"{'AUC':12s} = {AUC:0.4f}")
-        print(' ')
-        extras_dict.update({'AUC': AUC})
+        #AUC = metrics.auc(ffpr, ftpr)   # do not use this general auc function because it sometimes gives an error:
+                                         # ValueError: x is neither increasing nor decreasing
+        AUC      = np.trapz(ftpr, ffpr) # trapz is y,x; gives same result, but has same problem as above
+        AUC_full = np.trapz(ftpr, ffpr) # trapz is y,x; gives same result, but has same problem as above
+        AUC_plain= np.trapz(tpr, fpr)   # 
+        #AUC       = pAUC                 # or = cpAUC or = pAUCx
+        #AUC      = metrics.auc(fpr, tpr)# non-full ROC may give a slightly different result
+        AUC_macro = metrics.roc_auc_score(labels, scores) # macro
+        AUC_micro = metrics.roc_auc_score(labels, scores, average='micro')
+        AUPRC     = metrics.average_precision_score(labels, scores, average='micro')
+
+        if not quiet:
+            print(f"{'AUC':12s} = {AUC:0.4f}")
+            print(f"{'AUC_full':12s} = {AUC_full:0.4f}")
+            print(f"{'AUC_plain':12s} = {AUC_plain:0.4f}")
+            print(f"{'AUC_macro':12s} = {AUC_macro:0.4f}")
+            print(f"{'AUC_micro':12s} = {AUC_micro:0.4f}")
+            print(f"{'AUPRC':12s} = {AUPRC:0.4f}")
+            print(' ')
+        #endif
+        extras_dict.update({'AUC': AUC, 'AUC_full': AUC_full, 'AUC_plain': AUC_plain,
+                            'AUC_macro': AUC_macro, 'AUC_micro': AUC_micro,
+                            'AUPRC': AUPRC})
     #endif
 
-    # make a partial series from ffpr and ftpr and add interpolated endpoints as needed
-
-    pAUCc, pAUC, pAUCx, pAUCcn, pAUCn, pAUCxn \
-        = concordant_partial_AUC(pfpr, ptpr)
-    print(f"{'pAUC':12s} = {pAUC:0.4f}")
-    print(f"{'pAUCx':12s} = {pAUCx:0.4f}")
-    print(f"{'pAUCc':12s} = {pAUCc:0.4f}")
-    print(f"{'pAUCn':12s} = {pAUCn:0.4f}")
-    print(f"{'pAUCxn':12s} = {pAUCxn:0.4f}")
-    print(f"{'pAUCcn':12s} = {pAUCcn:0.4f}")
-    print(' ')
-
-    sPA = standardized_partial_area_proxy(pfpr, ptpr)
-    print(f"{'sPA':12s} = {sPA:0.4f}")
+    if not quiet:
+        print(f"{'pAUC':12s} = {pAUC:0.4f}")
+        print(f"{'pAUCx':12s} = {pAUCx:0.4f}")
+        print(f"{'cpAUC':12s} = {cpAUC:0.4f}")
+        print(f"{'pAUCn':12s} = {pAUCn:0.4f}")
+        print(f"{'pAUCxn':12s} = {pAUCxn:0.4f}")
+        print(f"{'cpAUCn':12s} = {cpAUCn:0.4f}")
+        print(' ')
+    #endif
+    sPA = standardized_partial_area_proxy(pfpr, ptpr, quiet)
     extras_dict.update({'sPA': sPA})
+    if not quiet:
+        print(f"{'sPA':12s} = {sPA:0.4f}")
+    #endif
 
+    # population values
+    globalN = len(negScores)
+    globalP = len(posScores)
+    # sample values
+    N       = float(sum(negWeights))
+    P       = float(sum(posWeights))
 
-    plabel = get_plabel(fnewlabel, matchedIndices, approxIndices)
-    avgSens, avgSpec  = average_measures_discrete(pfpr, ptpr, plabel)
-    print(f"{'avgSens':12s} = {avgSens:0.4f}")
-    print(f"{'avgSpec':12s} = {avgSpec:0.4f}")
-    extras_dict.update({'avgSens': avgSens})
-    extras_dict.update({'avgSpec': avgSpec})
+    plabel  = get_plabel(fnewlabel, matchedIndices, approxIndices, quiet)
+    measure_dict = discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)
+    extras_dict.update(measure_dict)
+    if not quiet:
+        print(f"{'bAvgA':12s} = {measure_dict['bAvgA']:0.4f}")
+        print(f"{'avgSens':12s} = {measure_dict['avgSens']:0.4f}")
+        print(f"{'avgSpec':12s} = {measure_dict['avgSpec']:0.4f}")
+        print(' ')
+        print(f"{'avgPPV':12s} = {measure_dict['avgPPV']:0.4f}")
+        print(f"{'avgNPV':12s} = {measure_dict['avgNPV']:0.4f}")
+        print(f"{'avgLRp':12s} = {measure_dict['avgLRp']:0.4f}")
+        print(f"{'avgLRn':12s} = {measure_dict['avgLRn']:0.4f}")
+        print(' ')
+    #endif
+    showAllMeasures = True
+    if showAllMeasures and not quiet:
+        print(f"{'ubAvgA':12s} = {measure_dict['ubAvgA']:0.4f}")
+        print(f"{'avgA':12s} = {measure_dict['avgA']:0.4f}")
+        print(f"{'avgBA':12s} = {measure_dict['avgBA']:0.4f}")
+        print(' ')
+    #endif
 
     if xrange[1] == 1:
-        PAI = partial_area_index_proxy(pfpr, ptpr)
-        print(f"{'PAI':12s} = {PAI:0.4f}  only applies to full or last range")
+        PAI = partial_area_index_proxy(pfpr, ptpr, quiet)
+        if not quiet:
+            print(f"{'PAI':12s} = {PAI:0.4f}  only applies to full or last range")
+        #endif
         extras_dict.update({'PAI': PAI})
     #endif
-    print(' ')
+    if not quiet:
+        print(' ')
+    #endif
 
     # check for expected equalities
-    pass1 = areEpsilonEqual(cDelta,  pAUCc,  'cDelta',  'pAUCc',  ep)
-    pass2 = areEpsilonEqual(cDeltan, pAUCcn, 'cDeltan', 'pAUCcn', ep)
-    print(' ')
+    pass1 = areEpsilonEqual(cDelta,                   cpAUC,  'cDelta',    'cpAUC',  ep, quiet)
+    pass2 = areEpsilonEqual(extras_dict['bAvgA'],     cpAUCn, 'bAvgA',     'cpAUCn', ep, quiet)
+    pass3 = areEpsilonEqual(extras_dict['avgSens'],   pAUCn,  'avgSens',   'pAUCn',  ep, quiet)
+    pass4 = areEpsilonEqual(extras_dict['avgSpec'],   pAUCxn, 'avgSpec',   'pAUCxn', ep, quiet)
 
-    return (pass1 and pass2), cDelta, pAUCc, pAUC, pAUCx, cDeltan, pAUCcn, pAUCn, pAUCxn, extras_dict
+    iterationPassed = pass1 and pass2 and pass3 and pass4
+    return iterationPassed, cDelta, cpAUC, pAUC, pAUCx, cDeltan, cpAUCn, pAUCn, pAUCxn, extras_dict
 #enddef
