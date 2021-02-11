@@ -4,8 +4,8 @@ Deep ROC Analysis Toolkit
 Code for deep ROC analysis by André Carrington and Yusuf Sheikh.  This supercedes the Partial-AUC-C toolkit with additions and corrections.
 
 Manuscript submitted:
-André M. Carrington, Douglas G. Manuel, Paul W. Fieguth, Venet Osmani, Bernhard Wernly, Steven Hawken, Matthew McInnes, Tim Ramsay, Carol Bennett, Olivia Magwood, Yusuf Sheikh and Andreas Holzinger. Deep ROC Analysis and AUC as Balanced Average Accuracy to Improve Model Selection, Understanding and Interpretation. Submitted, 2021.
-
+André M. Carrington, Douglas G. Manuel, Paul W. Fieguth, Tim Ramsay, Venet Osmani, Bernhard Wernly, Carol Bennett, Steven Hawken, Matthew McInnes, Olivia Magwood, Yusuf Sheikh and Andreas Holzinger. Deep ROC Analysis and AUC as Balanced Average Accuracy to Improve Model Selection, Understanding and Interpretation. Submitted, 2021.  
+  
 ## Instructions
 Ensure you have a Python 3.8 interpreter.  
 Copy files in Python3.8 folder to a local folder.  
