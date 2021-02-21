@@ -163,7 +163,8 @@ def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)
         # evenly distributed points the average is halfway up the vertical line. This is acceptable
         # for a normalized measure: avgSens = normalized (pAUC) = pAUCn; whereas the non-normalized
         # measure pAUC requires an area and is zero otherwise.
-        avgSens = (float(ptpr[-1]) + float(ptpr[0])) / 2
+        #avgSens = (float(ptpr[-1]) + float(ptpr[0])) / 2
+        avgSens  = np.nan
         if not quiet:
             print('Warning: nan value included in results, remove them prior to mean/sum etc')
         #endif
@@ -176,27 +177,28 @@ def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)
         # evenly distributed points the average is halfway across the horizontal line. This is acceptable
         # for a normalized measure: avgSpec = normalized (pAUCx) = pAUCxn; whereas the non-normalized
         # measure pAUCx requires an area and is zero otherwise.
-        avgSpec = (1-float(pfpr[-1]) + 1-float(pfpr[0])) / 2
+        #avgSpec = (1-float(pfpr[-1]) + 1-float(pfpr[0])) / 2
+        avgSpec = np.nan
         if not quiet:
             print('Warning: nan value included in results, remove them prior to mean/sum etc')
         #endif
     #endif
 
-    bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
-    ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
-    # if   avgSens == np.nan:
-    #     bAvgA  = avgSpec  # unweighted (balanced) average of one element, is the element
-    #     ubAvgA = avgSpec  # weighted average of one element, is the element
-    # elif avgSpec == np.nan:
-    #     bAvgA  = avgSens  # unweighted (balanced) average of one element, is the element
-    #     ubAvgA = avgSens  # weighted average of one element, is the element
-    # elif avgSens == np.nan and avgSpec == np.nan:
-    #     bAvgA  = np.nan
-    #     ubAvgA = np.nan
-    # else:
-    #     bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
-    #     ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
-    # #endif
+    # bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
+    # ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
+    if       np.isnan(avgSens) and not np.isnan(avgSpec):
+        bAvgA  = avgSpec  # unweighted (balanced) average of one element, is the element
+        ubAvgA = avgSpec  # weighted average of one element, is the element
+    elif not np.isnan(avgSens) and     np.isnan(avgSpec):
+        bAvgA  = avgSens  # unweighted (balanced) average of one element, is the element
+        ubAvgA = avgSens  # weighted average of one element, is the element
+    elif not np.isnan(avgSens) and not np.isnan(avgSpec):
+        bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
+        ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
+    else:
+        bAvgA  = np.nan
+        ubAvgA = np.nan
+    #endif
 
     sumdel  = delx + dely
     if sumdel == 0:
@@ -253,7 +255,8 @@ def concordant_partial_AUC(pfpr, ptpr, quiet):
         # evenly distributed points the average is halfway up the vertical line. This is acceptable
         # for a normalized measure: avgSens = normalized (pAUC) = pAUCn; whereas the non-normalized
         # measure pAUC requires an area and is zero otherwise.
-        pAUCn = (f+g)/2
+        #pAUCn = (f+g)/2
+        pAUCn  = np.nan
     else:
         # Compute the partial AUC mathematically defined in (Dodd and Pepe, 2003) and conceptually defined in
         #   (McClish, 1989; Thompson and Zucchini, 1989). Use the trapezoidal rule to compute the integral.
@@ -272,7 +275,8 @@ def concordant_partial_AUC(pfpr, ptpr, quiet):
         # evenly distributed points the average is halfway across the horizontal line. This is acceptable
         # for a normalized measure: avgSpec = normalized (pAUCx) = pAUCxn; whereas the non-normalized
         # measure pAUCx requires an area and is zero otherwise.
-        pAUCxn = (1-a+1-b)/2
+        #pAUCxn = (1-a+1-b)/2
+        pAUCxn  = np.nan
     else:
         # Compute the horizontal partial AUC (pAUCx) defined in (Carrington et al, 2020) and as
         # suggested by (Walter, 2005) and similar to the partial area index (PAI)
@@ -304,7 +308,15 @@ def concordant_partial_AUC(pfpr, ptpr, quiet):
     # pAUCcn= (pAUCx + pAUC) / total_for_norm
 
     # NEW piece-wise normalization:
-    pAUCcn = (1/2) * pAUCn + (1/2) * pAUCxn
+    if   not np.isnan(pAUCn) and not np.isnan(pAUCxn):
+        pAUCcn = (1/2) * pAUCn + (1/2) * pAUCxn
+    elif     np.isnan(pAUCn) and not np.isnan(pAUCxn):
+        pAUCcn = pAUCxn
+    elif not np.isnan(pAUCn) and     np.isnan(pAUCxn):
+        pAUCcn = pAUCn
+    else:
+        pAUCcn = np.nan
+    #endif
 
     return pAUCc, pAUC, pAUCx, pAUCcn, pAUCn, pAUCxn
 #enddef
@@ -1286,10 +1298,12 @@ def cErrorCheck(cRuleLeft, cRuleRight):
 
 def areEpsilonEqual(a, b, atext, btext, ep, quiet):
     ''' check equality with allowance for round-off errors up to epsilon '''
-    if   a == np.nan and b == np.nan:
+    if     np.isnan(a) and np.isnan(b):
         return True
-    elif a == np.nan or  b == np.nan:
-        return False
+    else:
+        if np.isnan(a) or  np.isnan(b):
+            return False
+        #endif
     #endif
     fuzzyEQ = lambda a, b, ep: (np.abs(a - b) < ep)
     if fuzzyEQ(a, b, ep):
@@ -1344,7 +1358,8 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
              fpr=[],           tpr=[],          thresh=[],
              fpr_opt=[],       tpr_opt=[],      thresh_opt=[],
              numShowThresh=30, testNum='###',   showPlot=False,
-             showData=False,   showError=False, ep=1*(10**-12),
+             showData=False,   showError=False, globalP=1,
+             globalN=1,        ep=1*(10**-12),
              rangeAxis='FPR',  useCloseRangePoint=False,
              quiet=False):
 
@@ -1634,12 +1649,12 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
         print(f"{'sPA':12s} = {sPA:0.4f}")
     #endif
 
-    # population values
-    globalN = len(negScores)
-    globalP = len(posScores)
+    # population values globalN and globalP are passed in (not the test sample, nor the group sample)
+    # globalN = len(negScores)       # test sample
+    # globalP = len(posScores)       # test sample
     # sample values
-    N       = float(sum(negWeights))
-    P       = float(sum(posWeights))
+    N       = float(sum(negWeights)) # group sample
+    P       = float(sum(posWeights)) # group sample
 
     plabel  = get_plabel(fnewlabel, matchedIndices, approxIndices, quiet)
     measure_dict = discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)

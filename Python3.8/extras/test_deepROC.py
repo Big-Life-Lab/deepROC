@@ -43,8 +43,8 @@
 # et al [3]. It uses the trapezoid rule to compute area.
 #
 # Whole measures:     AUC,     c
-# Partial measures:   cpAUC,   cDelta,  pAUC (pAUCy), pAUCx
-# Normalized partial: cpAUCn,  cDeltan, pAUCn,        pAUCxn,  cLocal
+# Partial measures:   pAUCc,   cDelta,  pAUC (pAUCy), pAUCx
+# Normalized partial: pAUCcn,  cDeltan, pAUCn,        pAUCxn,  cLocal
 #
 # References:
 # 1. Fawcett T. An Introduction to ROC Analysis, Pattern
@@ -66,13 +66,13 @@ global quiet, resultFile
 quiet = False
 
 # choose one of the following as input (file supercedes others if multiple):
-useFile             = False
-useSingleTestVector = True
+useFile             = True
+useSingleTestVector = False
 useAllTestVectors   = False
 
 # specify file input parameters
 mydata              = ['040', '356', '529', '536', '581', '639', '643']
-fileName            = f'input-matlab/result{mydata[2]}.mat'  # a matlab file (or future: csv file) for input
+fileName            = f'input-matlab/result{mydata[3]}.mat'  # a matlab file (or future: csv file) for input
 scoreVarColumn      = 'yscoreTest'                  # yscoreTest, yscore
 targetVarColumn     = 'ytest'                       # ytest, yhatTest, yhat, ytrain
 #scoreVarColumn      = 'yscore'                   # yscoreTest, yscore
@@ -95,7 +95,7 @@ rates               = False                             # treat costs as rates, 
 sanityCheckWholeAUC = True
 showPlot            = True
 showData            = False
-showError           = True     # areas in ROC plots that represent error
+showError           = False     # areas in ROC plots that represent error
 
 import do_pAUCc            as ac
 import getPDF              as acKDE
@@ -514,7 +514,8 @@ def test_deepROC(testNum=1, costs={}, sanityCheckWholeAUC=True, showPlot=True, s
         #endif
     #endif
 
-    deepROC_groups = [[0.0, 0.5], [0.5, 1.0]]
+    # deepROC_groups= [[0.0, 0.5], [0.5, 1.0]]
+    deepROC_groups  = pAUCranges
     #deepROC_groups = [[0.0, 0.167], [0.167, 0.333], [0.333, 0.5],
     #                  [0.5, 0.667], [0.667, 0.833], [0.833, 1.0]]  # note: whole ROC is
                                                                     # automatically included

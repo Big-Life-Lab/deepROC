@@ -27,20 +27,15 @@ import transcript
 import scipy.stats as st
 from   os.path import splitext
 
-testNum1   = 1
-model1     = 'svcMSig'
-iteration1 = 2
-#iteration1 = 13
-measure1   = 'AUC'
-#measure1   = 'pAUCn.1'
-testNum2   = 1
-model2     = 'rf0'
-iteration2 = 2
-#iteration2 = 32
-measure2   = 'AUC'
-#measure2   = 'pAUCn.1'
-#model2     = 'plogr1'
-#iteration2 = 53
+testNum1    = 1          # 1.AUC, 2.AUPRC, 3.pAUCn1, 4.cpAUCn1
+model1      = 'svcMSig'  # svcMSig, plogr1, rf0
+iteration1  = 64         # best iteration optizing by measure x
+measure1    = 'AUC'      # report measure y: AUC, AUPRC, pAUCn.3, cpAUCn.1
+
+testNum2    = 1
+model2      = 'plogr1'
+iteration2  = 63
+measure2    = 'AUC'
 
 iterations = 100
 k_folds    = 5

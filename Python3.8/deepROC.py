@@ -349,7 +349,7 @@ def doCalibration(scores, labels, posclass, fileNum, showPlot, quiet):
 #enddef
 
 def deepROC(testNum='1',    costs={}, sanityCheckWholeAUC=True,    showPlot=True, showData=True,
-            showError=True, useCloseRangePoint=False, pAUCranges={},
+            showError=True, globalP=1, globalN=1, useCloseRangePoint=False, pAUCranges={},
             scores=[], labels=[], posclass=1, rangeAxis='FPR', quiet=False):
 
     doCalibration(scores, labels, posclass, testNum, showPlot, quiet)
@@ -427,9 +427,9 @@ def deepROC(testNum='1',    costs={}, sanityCheckWholeAUC=True,    showPlot=True
                           fpr=fpr,                  tpr=tpr,             thresh=thresholds,
                           fpr_opt=fpr_opt,          tpr_opt=tpr_opt,     thresh_opt=thresh_opt,
                           numShowThresh=showThresh, testNum=testNum,     showPlot=showPlot,
-                          showData=showData,        showError=showError, ep=ep,
-                          rangeAxis=rangeAxis,      useCloseRangePoint=useCloseRangePoint,
-                          quiet=quiet)
+                          showData=showData,        showError=showError, globalP=globalP,
+                          globalN=globalN,          ep=ep,               rangeAxis=rangeAxis,
+                          useCloseRangePoint=useCloseRangePoint, quiet=quiet)
 
         main_result_dict = dict(cDelta=cDelta,   cpAUC=cpAUC,   pAUC=pAUC,   pAUCx=pAUCx,
                                 cDeltan=cDeltan, cpAUCn=cpAUCn, pAUCn=pAUCn, pAUCxn=pAUCxn,
