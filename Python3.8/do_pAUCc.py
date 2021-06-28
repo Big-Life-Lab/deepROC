@@ -321,39 +321,154 @@ def concordant_partial_AUC(pfpr, ptpr, quiet):
     return pAUCc, pAUC, pAUCx, pAUCcn, pAUCn, pAUCxn
 #enddef
 
-def partial_c_statistic(posScores, negScores, posWeights, negWeights, posHeights, negWidths):
+def partial_c_statistic(posScores, negScores, posWeights, negWeights, yrange, xrange):
     ''' partial_c_statistic computes the cStatistic given a vector of scores for actual
         positives and a vector of scores for actual negatives in the ROC data and
         corresponding weight vectors with elements in [0,1] that indicate which instances
         are in the partial range and how much weight for each instance.  That is,
         boundary instances may have partial weight, interior instances will have weight 1
         and exterior instances will have weight 0'''
+
+    # NOTE: THERE IS ONE CASE NOT WRITTEN/HANDLED YET (test dataset 12) WHEN THE TOP AND
+    # BOTTOM (OR LEFT AND RIGHT) BOUNDS OF THE PARTIAL CURVE ARE WITHIN THE SAME CELL,
+    # THE LOGIC DOES NOT YET HANDLE THIS PROPERLY.  TIME IS THE ONLY LIMITATION...
+
     P      = len(posScores)
     N      = len(negScores)
 
-    # OLD method: does not work for ties
     partP  = float(sum(posWeights))
     partN  = float(sum(negWeights))
-    # NEW method: lazily use additional inputs
-    # partP  = (yrange[1]-yrange[0]) * P
-    # partN  = (xrange[1]-xrange[0]) * N
-    cp     = 0
-    cn     = 0
+
+    # for the case of a flat vertical range, or a flat horizontal range, the scores and
+    # weights do not tell us enough to compute the partial c statistic, so we need
+    # xrange and yrange which are indices including decimals for interpolation
+    if partP == 0:  # if range in horizontal, no vertical (no positives)
+        posIndexC_0_1   = int(yrange[0])      # round down to int, for index
+        remaining_posWeight = float(yrange[0]) - posIndexC_0_1
+    #endif
+    if partN == 0:  # if range in vertical, no horizontal (no negatives)
+        negIndexC_0_1   = int(N-float(xrange[0]))  # round down to int, for index
+        remaining_negWeight = N-float(xrange[0]) - negIndexC_0_1
+    #endif
+
+    leftIndex = -1  # default value to detect
+    for k in range(0, N):
+        if negWeights[k] > 0:
+            leftIndex = k
+            break
+        #endif
+    #endfor
+    rightIndex = -1  # default value to detect
+    for k in range(N-1, -1, -1):
+        if negWeights[k] > 0:
+            rightIndex = k
+            break
+        #endif
+    #endfor
+    bottomIndex = -1  # default value to detect
+    for j in range(0, P):
+        if posWeights[j] > 0:
+            bottomIndex = j
+            break
+        # endif
+    # endfor
+    topIndex    = -1  # default value to detect
+    for j in range(P-1, -1, -1):
+        if posWeights[j] > 0:
+            topIndex = j
+            break
+        #endif
+    #endfor
+
+    # compute positive count cp (in the horizontal stripe) based on:
+    #   the subset of positives in the partial curve (non-zero posWeights)
+    #   the negatives to the right of the partial curve (negWeights with indices
+    #     higher than or equal to the horizontally leftmost non-zero negWeights index)
+    if topIndex == -1 or bottomIndex == -1:  # no horizontal stripe
+        cp = 0
+    elif partN == 0:  # horizontal stripe but no vertical stripe and no negatives
+        cp = 0
+        for k in range(negIndexC_0_1, N):  # enforce under curve positives (no partial index)
+            for j in range(0, P):
+                if posWeights[j] == 0:     # enforce subset of positives
+                    continue
+                #endif
+                # outside subset of negatives use one weight, no h
+                cp = cp + float(posWeights[j])
+            # endfor
+        # endfor
+        cp = cp + (remaining_negWeight * partP)  # add partial negative index/weight
+    else:
+        cp = 0
+        for k in range(leftIndex, N):   # enforce right of curve negatives
+            for j in range(0, P):
+                if posWeights[j] == 0:  # enforce subset of positives
+                    continue
+                #endif
+                # h==1 correct rank, h==0.5 tie, h==0 wrong rank
+                h    = Heaviside(float(posScores[j]) - float(negScores[k]))
+                posW = float(posWeights[j])
+                negW = float(negWeights[k])
+                if negW > 0:  # within subset of negatives use both weights
+                    cp = cp + posW * negW * h
+                else:  # outside subset of negatives use one weight, no h
+                    cp = cp + posW
+                if k == rightIndex and 0 < negW < 1:  # in this case
+                    cp = cp + posW * (1 - negW)      # also add this part
+                #endif
+            #endfor
+        #endfor
+    #endif
+
+    # compute negative count cn (in the vertical stripe) based on:
+    #   the subset of negatives in the partial curve (non-zero negWeights)
+    #   the positives under the partial curve (posWeights with indices
+    #     lower than or equal to the vertically topmost non-zero posWeights index)
+    #     note: posWeights is directional, so if at the bottom of a range,
+    #           it must be reversed: 1-posWeights
+    if leftIndex == -1 or rightIndex == -1:  # no vertical stripe
+        cn = 0
+    elif partP == 0:  # vertical stripe but no horizontal stripe and no positives
+        cn = 0
+        for j in range(0, posIndexC_0_1+1):  # enforce under curve positives, no partial index
+            for k in range(0, N):
+                if negWeights[k] == 0:           # enforce subset of negatives
+                    continue
+                # outside subset of positives use one weight, no h
+                cn = cn + float(negWeights[k])
+            # endfor
+        # endfor
+        cn = cn + (remaining_posWeight * partN)  # add partial positive index/weight
+    else:  # vertical stripe normal case
+        cn = 0
+        for j in range(0, topIndex+1):  # enforce under curve positives
+            for k in range(0, N):
+                if negWeights[k] == 0:  # enforce subset of negatives
+                    continue
+                # h==1 correct rank, h==0.5 tie, h==0 wrong rank
+                h    = Heaviside(float(posScores[j]) - float(negScores[k]))
+                posW = float(posWeights[j])
+                negW = float(negWeights[k])
+                if posW > 0:  # within subset of positives use both weights and h
+                    cn = cn + negW * posW * h
+                else:  # outside subset of positives use one weight, no h
+                    cn = cn + negW
+                if j == bottomIndex and 0 < posW < 1:  # in this case
+                    cn = cn + negW * (1 - posW)        # also add this part
+                #endif
+            #endfor
+        #endfor
+    #endif
+
     cLocal = 0
     for j in range(0, P):
         for k in range(0, N):
             h      = Heaviside(float(posScores[j]) - float(negScores[k]))
-            # OLD:
-            cp     = cp     + float(posWeights[j]) * h
-            cn     = cn     + float(negWeights[k]) * h
-            # NEW:
-            # cp     = cp     + float(posWeights[j]) * float(posHeights[j]) * h
-            # cn     = cn     + float(negWeights[k]) * float(negWidths[k])  * h
-
             cLocal = cLocal + float(posWeights[j]) * \
-                              float(negWeights[k]) * h
+                     float(negWeights[k]) * h
         #endfor
     #endfor
+
     whole_area             = N * P
     cDelta      = (1/2)*(cp/whole_area) + (1/2)*(cn/whole_area)
     horizontal_stripe_area = N * partP
@@ -363,22 +478,31 @@ def partial_c_statistic(posScores, negScores, posWeights, negWeights, posHeights
     # NEW piece-wise normalization:
     if   partP == 0 and partN == 0:
         cDeltan = np.nan
+        cn2     = np.nan
+        cp2     = np.nan
     elif partP == 0:
+        cn2     = (cn/vertical_stripe_area)
+        cp2     = np.nan
         cDeltan = (cn/vertical_stripe_area)
     elif partN == 0:
+        cn2     = np.nan
+        cp2     = (cp/horizontal_stripe_area)
         cDeltan = (cp/horizontal_stripe_area)
     else:
+        cn2     = (cn/vertical_stripe_area)
+        cp2     = (cp/horizontal_stripe_area)
         cDeltan = (1/2) * (cp/horizontal_stripe_area) + (1/2) * (cn/vertical_stripe_area)
     #endif
 
-    #local_area = partP * partN
-    #if local_area == 0:
-    #    cLocal = 0
-    #else:
-    #    cLocal = cLocal / local_area
-    ##endif
+    local_area = partP * partN
+    if local_area == 0:
+        cLocal = 0
+    else:
+        cLocal = cLocal / local_area
+    #endif
 
-    return cDelta, cDeltan, cLocal
+    return cDelta, cDeltan, cLocal, cp/whole_area, cn/whole_area, cp2, cn2, cp, cn, \
+           whole_area, horizontal_stripe_area, vertical_stripe_area
 #enddef
 
 def partial_area_index_proxy(pfpr, ptpr, quiet):
@@ -1450,7 +1574,7 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
     #
     #    If a partial range in FPR ends on the vertical part of a staircase step,
     #    then we need to specify if it ends at the bottom or top of the step. Or
-    #    for a partial range in TPR the ambiguity is horizontal: left or right.
+    #             for a partial range in TPR the ambiguity is horizontal: left or right.
     #    We resolve any ambiguities that arise by using either the most
     #    SouthWest (SW) point or the most NorthEast (NE) point, for each end of
     #    the partial range:
@@ -1596,10 +1720,15 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
         extras_dict.update({'c': c})
     #endif
 
-    cDelta, cDeltan, cLocal \
-        = partial_c_statistic(posScores, negScores, posWeights, negWeights, posHeights, negWidths)
+    cDelta, cDeltan, cLocal, cp1, cn1, cp2, cn2, cp, cn, \
+    whole_area, horizontal_stripe_area, vertical_stripe_area \
+        = partial_c_statistic(posScores, negScores, posWeights, negWeights, posIndexC, negIndexC)
     if not quiet:
+        print(f"{'cn (~pAUC)':12s} = {cn1:0.4f}    from {cn:0.2f}/{whole_area:0.2f}")
+        print(f"{'cp (~pAUCx)':12s} = {cp1:0.4f}    from {cp:0.2f}/{whole_area:0.2f}")
         print(f"{'cDelta':12s} = {cDelta:0.4f}")
+        print(f"{'cn2 (~pAUCn)':12s} = {cn2:0.4f}    from {cn:0.2f}/{vertical_stripe_area:0.2f}")
+        print(f"{'cp2 (~pAUCxn)':12s}= {cp2:0.4f}    from {cp:0.2f}/{horizontal_stripe_area:0.2f}")
         print(f"{'cDeltan':12s} = {cDeltan:0.4f}")
         print(f"{'cLocal':12s} = {cLocal:0.4f}")
         print(' ')

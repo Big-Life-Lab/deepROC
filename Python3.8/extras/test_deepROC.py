@@ -66,8 +66,8 @@ global quiet, resultFile
 quiet = False
 
 # choose one of the following as input (file supercedes others if multiple):
-useFile             = True
-useSingleTestVector = False
+useFile             = False
+useSingleTestVector = True
 useAllTestVectors   = False
 
 # specify file input parameters
@@ -79,7 +79,7 @@ targetVarColumn     = 'ytest'                       # ytest, yhatTest, yhat, ytr
 #targetVarColumn     = 'yhat'                     # ytest, yhatTest, yhat, ytrain
 
 # specify single test vector input parameters
-singleTestVectorNum = 12  # which of 12 test vectors the function get_ROC_test_scores_labels_ranges below
+singleTestVectorNum = 16  # which of 16 test vectors the function get_ROC_test_scores_labels_ranges below
 
 # choose data science parameters
 rangeAxis           = 'FPR'  # examine ranges (next) by FPR or TPR
@@ -347,6 +347,34 @@ def get_ROC_test_scores_labels_ranges(testNum):
         labels = [  1,   1,   0,   0]
         pAUCranges = [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0]]
 
+    elif testNum == 13:
+        descr = 'Test 13. A simple test'
+        scores = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.7, 0.7, 0.7]
+        labels = [  1,   1,   0,   1,   1,   0,   1,   1,   0]
+        pAUCranges = [[0.0, 0.25], [0.25, 0.5], [0.5, 1.0]]
+
+    elif testNum == 14:  # previously 3b
+        descr = 'Test 14.(3b) A variation of Test 3: Hilden Figure 2a data with scores reversed to follow the normal convention'
+        # scores (0, 1, 2, 3) high for negative were changed to (3, 2, 1, 0) respectively, high for positive
+        scores = [ 3,  3,  3,  3,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1]  # 3b
+        labels = [ 1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0]  # 3b
+        # pAUCranges = [[0.0, 0.5], [0.5, 1.0]]
+        pAUCranges = [[0.0, 0.2], [0.2, 0.4], [0.4, 1.0]]
+
+    elif testNum == 15:  # previously 3c
+        descr = 'Test 15.(3c) A variation of Test 3: Hilden Figure 2a data with scores reversed to follow the normal convention'
+        # scores (0, 1, 2, 3) high for negative were changed to (3, 2, 1, 0) respectively, high for positive
+        scores = [ 3,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1]  # 3c
+        labels = [ 1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0]  # 3c
+        #pAUCranges = [[0.0, 0.5], [0.5, 1.0]]
+        pAUCranges = [[0.0, 0.2], [0.2, 0.4], [0.4, 1.0]]
+
+    elif testNum == 16:  # previously 3d
+        descr = 'Test 16.(3d) A variation of Test 3: Hilden Figure 2a data with scores reversed to follow the normal convention'
+        scores = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1]  # 3d
+        labels = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 3d
+        pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
+
     else:
         raise ValueError('Not a valid built-in test number.')
     return scores, labels, pAUCranges, descr
@@ -583,7 +611,7 @@ elif useSingleTestVector == True:
                           useCloseRangePoint=useCloseRangePoint)
 elif useAllTestVectors == True:
     passAllTests = True
-    numAllTests  = 11
+    numAllTests  = 15  # 0-indexed
     passTest     = np.zeros((numAllTests,))
     for testNum in range(1, numAllTests+1):
         passTest[int(testNum-1)] = \
