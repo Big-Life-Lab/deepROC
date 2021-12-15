@@ -32,12 +32,17 @@ import matplotlib.pyplot as plt
 import loess as ml
 import scipy.stats as st
 
-testNum    = 3
+testNum    = 5
 #model      = 'case'
-model      = 'svcMSig'
-iterations = 100
-k_folds    = 5
-repetition = 2
+model      = 'nnReLU'
+reanalysis = ''
+showLoess  = True
+showLines  = False
+dotcolor   = 'orange'
+curvecolor = 'orange'
+iterations = 3
+k_folds    = 10
+repetition = 1
 total_folds= k_folds * repetition
 
 def formatList(alist):
@@ -77,16 +82,32 @@ def simple_plot_group_results(yvals1, yvals2, j):
 # enddef
 
 def nice_plot_group_results(j, x, y, y_name, w, w_name, model_name, num_groups,
-                            measure_to_optimize, fileNum, ybottom, ytop):
+                            measure_to_optimize, fileNum, ybottom, ytop, dotcolor, curvecolor):
     df = pd.DataFrame({"x": x, "y": y})
-    fit_df = ml.loess("x", "y", data=df, alpha=0.7, poly_degree=2)
+    if showLoess:
+        fit_df = ml.loess("x", "y", data=df, alpha=0.7, poly_degree=2)
+    #endif
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     xlen = int(df.shape[0])
     xjitter = np.random.uniform(-0.04, +0.04, (xlen, ))
 
-    ax1.scatter(df["x"]+pd.Series(xjitter), df["y"], color="blue", marker="o", s=7, label="_nolegend_")
-    ax1.plot(fit_df['x'], fit_df['y'], color='red', linewidth=3, label=f'{y_name} loess fit')
+    if showLines:
+        zz = len(df["x"])
+        za = df["x"] + pd.Series(xjitter)
+        zb = df["y"]
+        for i in range(0, num_groups-1):
+            theyStart = i*(num_groups-1)
+            theyEnd   = theyStart + (num_groups-1)
+            they = list(range(theyStart, theyEnd))
+            ax1.plot(za[they], zb[they], color=dotcolor, marker="o", label="_nolegend_")
+        #ax1.plot(za, zb, color="blue", marker="o", label="_nolegend_")
+    else:
+        ax1.scatter(df["x"]+pd.Series(xjitter), df["y"], color=dotcolor, marker="o", s=7, label="_nolegend_")
+    #endif
+    if showLoess:
+        ax1.plot(fit_df['x'], fit_df['y'], color=curvecolor, linewidth=3, label=f'{y_name} loess fit')
+    #endif
     if w_name == '':
         pass
     else:
@@ -94,9 +115,9 @@ def nice_plot_group_results(j, x, y, y_name, w, w_name, model_name, num_groups,
         # se = w[j, 1]
         # ax1.fill([1, num_groups - 1, num_groups - 1, 1, 1],
         #          [mu + se, mu + se, mu - se, mu - se, mu + se],
-        #          color='grey', alpha=0.4, linewidth=0)
+        #          color='grey', alpha=0.3, linewidth=0)
         ax1.plot(list(range(1, num_groups)), [mu] * (num_groups - 1),
-                 color='grey', linestyle='--', linewidth=2, label=w_name)
+                 color=curvecolor, alpha=0.3, linestyle='--', linewidth=2, label=w_name)
     #endif
     plt.title(f'{y_name} results from {model_name} optimized by {measure_to_optimize}')
     plt.xlabel('Probability / Predicted Risk Groups')
@@ -104,7 +125,7 @@ def nice_plot_group_results(j, x, y, y_name, w, w_name, model_name, num_groups,
     #floor5percent = lambda x: np.floor((x*100)/5)*5/100
     #plt.ylim(floor5percent(float(min(y))), floor5percent(float(max(y)))+0.05)
     plt.ylim(ybottom, ytop)
-    plt.legend()
+    #plt.legend()
     plt.tight_layout()
     plt.show()
     fig.savefig(f'output/groups_{fileNum:03d}_{model_name}_{y_name}_{j}.png')
@@ -131,10 +152,10 @@ def analyze(testNum, name, iterations):
         fileHandle = open(f'output/results_{name}{testNum}.pkl', 'rb')
         fileHandleS= open(f'output/settings_{testNum}.pkl', 'rb')
     else:
-        logfn = f'output/analysis_{name}_{testNum:03d}.txt'
+        logfn = f'output/analysis_{name}_{testNum:03d}{reanalysis}.txt'
         transcript.start(logfn)
         print(f'results_{testNum:03d}_{name}:')
-        fileHandle = open(f'output/results_{testNum:03d}_{name}.pkl', 'rb')
+        fileHandle = open(f'output/results_{testNum:03d}{reanalysis}_{name}.pkl', 'rb')
         fileHandleS= open(f'output/settings_{testNum:03d}.pkl', 'rb')
     #endif
     try:
@@ -149,20 +170,42 @@ def analyze(testNum, name, iterations):
     #endtry
 
     # create indices from above
-    AUC_i       = areaMeasures.index('AUC')
-    AUC_full_i  = areaMeasures.index('AUC_full')
-    AUC_plain_i = areaMeasures.index('AUC_plain')
-    AUC_micro_i = areaMeasures.index('AUC_micro')
-    AUPRC_i     = areaMeasures.index('AUPRC')
-    cpAUCn_i    = groupMeasures.index('cpAUCn')
-    pAUCn_i     = groupMeasures.index('pAUCn')
-    pAUCxn_i    = groupMeasures.index('pAUCxn')
-    cpAUC_i     = groupMeasures.index('cpAUC')
-    avgSens_i   = groupMeasures.index('avgSens')
-    avgSpec_i   = groupMeasures.index('avgSpec')
-    bAvgA_i     = groupMeasures.index('bAvgA')
-    avgPPV_i    = groupMeasures.index('avgPPV')
-    avgNPV_i    = groupMeasures.index('avgNPV')
+    AUC_ix      = areaMeasures.index('AUC')
+    AUC_full_ix = areaMeasures.index('AUC_full')
+    AUC_plain_ix= areaMeasures.index('AUC_plain')
+    AUC_micro_ix= areaMeasures.index('AUC_micro')
+    AUPRC_ix    = areaMeasures.index('AUPRC')
+
+    cDelta_ix   = groupMeasures.index('cDelta')
+    cpAUC_ix    = groupMeasures.index('cpAUC')
+    pAUC_ix     = groupMeasures.index('pAUC')
+    pAUCx_ix    = groupMeasures.index('pAUCx')
+
+    cDeltan_ix  = groupMeasures.index('cDeltan')
+    cpAUCn_ix   = groupMeasures.index('cpAUCn')
+    pAUCn_ix    = groupMeasures.index('pAUCn')
+    pAUCxn_ix   = groupMeasures.index('pAUCxn')
+
+    groupMeasures = ['cDelta', 'cpAUC', 'pAUC', 'pAUCx',
+                     'cDeltan', 'cpAUCn', 'pAUCn', 'pAUCxn',
+                     'avgA', 'bAvgA', 'avgSens', 'avgSpec',
+                     'avgPPV', 'avgNPV',
+                     'avgLRp', 'avgLRn',
+                     'ubAvgA', 'avgBA', 'sPA']
+
+    avgA_ix     = groupMeasures.index('avgA')
+    bAvgA_ix    = groupMeasures.index('bAvgA')
+    avgSens_ix  = groupMeasures.index('avgSens')
+    avgSpec_ix  = groupMeasures.index('avgSpec')
+
+    avgPPV_ix   = groupMeasures.index('avgPPV')
+    avgNPV_ix   = groupMeasures.index('avgNPV')
+    avgLRp_ix   = groupMeasures.index('avgLRp')
+    avgLRn_ix   = groupMeasures.index('avgLRn')
+
+    ubAvgA_ix   = groupMeasures.index('ubAvgA')
+    avgBA_ix    = groupMeasures.index('avgBA')
+    sPA_ix      = groupMeasures.index('sPA')
 
     num_groups         = len(deepROC_groups) + 1
     num_group_measures = len(groupMeasures)
@@ -187,8 +230,8 @@ def analyze(testNum, name, iterations):
 
     # code from https://stackoverflow.com/questions/7568627/using-python-string-formatting-with-lists
     for i in range(0, iterations):
-        print(f'{i:03d}: mean_AUC_full:   {np.mean(is_not_nan(areaMatrix[:, AUC_full_i, i])):0.4f}')
-        vector = is_not_nan(areaMatrix[:, AUC_i, i])
+        print(f'{i:03d}: mean_AUC_full:   {np.mean(is_not_nan(areaMatrix[:, AUC_full_ix, i])):0.4f}')
+        vector = is_not_nan(areaMatrix[:, AUC_ix, i])
         computed_mean_CI_AUC[i, 0] = np.mean(vector)
         if total_folds >= 30:
             # z = 1.96
@@ -200,58 +243,59 @@ def analyze(testNum, name, iterations):
         computed_mean_CI_AUC[i, 1] = (ub-lb)/2
         # computed_mean_CI_AUC[i, 1] = 2.262 * np.std(vector, ddof=1) / np.sqrt(len(vector))
         print(f'     mean_AUC:        {computed_mean_CI_AUC[i, 0]:0.4f}')
-        print(f'     AUC:             {formatList(list(areaMatrix[:, AUC_i, i]))}')
-        print(f'     bAvgA.0:         {formatList(list(groupMatrix[:, 0, bAvgA_i, i]))}')
-        print(f'     cpAUC.0:         {formatList(list(groupMatrix[:, 0, cpAUC_i, i]))}')
+        print(f'     AUC:             {formatList(list(areaMatrix[:, AUC_ix, i]))}')
+        print(f'     cDeltan.0:       {formatList(list(groupMatrix[:, 0, cDeltan_ix, i]))}')
+        print(f'     bAvgA.0:         {formatList(list(groupMatrix[:, 0, bAvgA_ix, i]))}')
+        print(f'     cpAUC.0:         {formatList(list(groupMatrix[:, 0, cpAUC_ix, i]))}')
         temp = []
         for f in range(0, total_folds):
             # compute sum of cpAUC.i, across groups, for i=1:
-            temp = temp + [np.sum(is_not_nan(groupMatrix[f, 1:, cpAUC_i, i]))]
+            temp = temp + [np.sum(is_not_nan(groupMatrix[f, 1:, cpAUC_ix, i]))]
         # show cp.AUC.sum across folds
         print(f'     cpAUC.sum:       {formatList(list(temp))}')
         print(' ')
-        vector = is_not_nan(areaMatrix[:, AUPRC_i, i])
+        vector = is_not_nan(areaMatrix[:, AUPRC_ix, i])
         computed_mean_CI_AUPRC[i, 0] = np.mean(vector)
         computed_mean_CI_AUPRC[i, 1] = 2.262 * np.std(vector, ddof=1) / np.sqrt(len(vector))
         print(f'     mean_AUPRC:      {computed_mean_CI_AUPRC[i, 0]:0.4f}')
-        vector = is_not_nan(groupMatrix[:, 0, avgPPV_i, i])
+        vector = is_not_nan(groupMatrix[:, 0, avgPPV_ix, i])
         computed_mean_CI_avgPPV[i, 0] = np.mean(vector)
         computed_mean_CI_avgPPV[i, 1] = 2.262 * np.std(vector, ddof=1) / np.sqrt(len(vector))
         print(f'     mean_avgPPV.0:   {computed_mean_CI_avgPPV[i, 0]:0.4f}')
-        print(f'     AUPRC:           {formatList(list(areaMatrix[:, AUPRC_i, i]))}')
-        print(f'     avgPPV.0:        {formatList(list(groupMatrix[:, 0, avgPPV_i, i]))}')
+        print(f'     AUPRC:           {formatList(list(areaMatrix[:, AUPRC_ix, i]))}')
+        print(f'     avgPPV.0:        {formatList(list(groupMatrix[:, 0, avgPPV_ix, i]))}')
         print(' ')
-        vector = is_not_nan(groupMatrix[:, 0, avgNPV_i, i])
+        vector = is_not_nan(groupMatrix[:, 0, avgNPV_ix, i])
         computed_mean_CI_avgNPV[i, 0] = np.mean(vector)
         computed_mean_CI_avgNPV[i, 1] = 2.262 * np.std(vector, ddof=1) / np.sqrt(len(vector))
         print(f'     mean_avgNPV.0:   {computed_mean_CI_avgNPV[i, 0]:0.4f}')
-        print(f'     avgNPV.0:        {formatList(list(groupMatrix[:, 0, avgNPV_i, i]))}')
+        print(f'     avgNPV.0:        {formatList(list(groupMatrix[:, 0, avgNPV_ix, i]))}')
         print(' ')
 
         for g in range(1, num_groups):
             if g == 1:
-                vector = is_not_nan(groupMatrix[:, g, cpAUCn_i, i])
+                vector = is_not_nan(groupMatrix[:, g, cpAUCn_ix, i])
                 computed_mean_CI_cpAUCn1[i, 0] = np.mean(vector)
                 computed_mean_CI_cpAUCn1[i, 1] = 2.262 * np.std(vector, ddof=1) / np.sqrt(len(vector))
                 print(f'     mean_cpAUCn.1:   {computed_mean_CI_cpAUCn1[i, 0]:0.4f}')
             else:
-                print(f'     mean_cpAUCn.{g}:   {np.mean(is_not_nan(groupMatrix[:, g, cpAUCn_i, i])):0.4f}')
+                print(f'     mean_cpAUCn.{g}:   {np.mean(is_not_nan(groupMatrix[:, g, cpAUCn_ix, i])):0.4f}')
             #endif
-            print(f'     cpAUCn.{g}:        {formatList(list(groupMatrix[:, g, cpAUCn_i, i]))}')
-            print(f'     bAvgA.{g}:         {formatList(list(groupMatrix[:, g, bAvgA_i, i]))} - not interpolated to align with group boundaries')
+            print(f'     cpAUCn.{g}:        {formatList(list(groupMatrix[:, g, cpAUCn_ix, i]))}')
+            print(f'     bAvgA.{g}:         {formatList(list(groupMatrix[:, g, bAvgA_ix, i]))} - not interpolated to align with group boundaries')
             print(' ')
             if g == 1:
-                vector = is_not_nan(groupMatrix[:, g, pAUCn_i, i])
+                vector = is_not_nan(groupMatrix[:, g, pAUCn_ix, i])
                 computed_mean_CI_pAUCn1[i, 0] = np.mean(vector)
                 computed_mean_CI_pAUCn1[i, 1] = 2.262 * np.std(vector, ddof=1) / np.sqrt(len(vector))
                 print(f'     mean_pAUCn.1:    {computed_mean_CI_pAUCn1[i, 0]:0.4f}')
             else:
-                print(f'     mean_pAUCn.{g}:    {np.mean(is_not_nan(groupMatrix[:, g, pAUCn_i, i])):0.4f}')
+                print(f'     mean_pAUCn.{g}:    {np.mean(is_not_nan(groupMatrix[:, g, pAUCn_ix, i])):0.4f}')
             #endif
-            print(f'     pAUCn.{g}:         {formatList(list(groupMatrix[:, g, pAUCn_i, i]))}')
-            print(f'     avgSens.{g}:       {formatList(list(groupMatrix[:, g, avgSens_i, i]))} - not interpolated to align with group boundaries')
-            print(f'     pAUCxn.{g}:        {formatList(list(groupMatrix[:, g, pAUCxn_i, i]))}')
-            print(f'     avgSpec.{g}:       {formatList(list(groupMatrix[:, g, avgSpec_i, i]))} - not interpolated to align with group boundaries')
+            print(f'     pAUCn.{g}:         {formatList(list(groupMatrix[:, g, pAUCn_ix, i]))}')
+            print(f'     avgSens.{g}:       {formatList(list(groupMatrix[:, g, avgSens_ix, i]))} - not interpolated to align with group boundaries')
+            print(f'     pAUCxn.{g}:        {formatList(list(groupMatrix[:, g, pAUCxn_ix, i]))}')
+            print(f'     avgSpec.{g}:       {formatList(list(groupMatrix[:, g, avgSpec_ix, i]))} - not interpolated to align with group boundaries')
             print(' ')
         #endfor
         #print(f'     group0_measFold0: {formatList(list(groupMatrix[0,0,:,i]))}')
@@ -259,19 +303,19 @@ def analyze(testNum, name, iterations):
 
     myround = lambda a: round(10000*np.max(a))/100  # as percentage, rounded to 2nd decimal place
     j    = np.argmax(computed_mean_CI_AUC[:, 0])
-    print(f'Max mean_AUC     {myround(computed_mean_CI_AUC[j, 0]):0.2f} '
+    print(f'Max mean_AUCi    {myround(computed_mean_CI_AUC[j, 0]):0.2f} '
           f'+/- {myround(computed_mean_CI_AUC[j, 1]):0.2f} is at index {j}')
-    x, y = setupPlotData(groupMatrix, cpAUCn_i, num_groups, j, total_folds)
+    x, y = setupPlotData(groupMatrix, cpAUCn_ix, num_groups, j, total_folds)
     nice_plot_group_results(j, x, y, 'cpAUCn', computed_mean_CI_AUC, 'AUC',
-                           name, num_groups, measure_to_optimize, testNum, 0.4, 0.8)
+                           name, num_groups, measure_to_optimize, testNum, 0.35, 1, dotcolor, curvecolor)
 
     j = np.argmax(computed_mean_CI_avgPPV[:, 0])
     print(f'Max mean_avgPPV  {myround(computed_mean_CI_avgPPV[j, 0]):0.2f} '
           f'+/- {myround(computed_mean_CI_avgPPV[j, 1]):0.2f} is at index {j}')
-    x, y = setupPlotData(groupMatrix, avgPPV_i, num_groups, j, total_folds)
+    x, y = setupPlotData(groupMatrix, avgPPV_ix, num_groups, j, total_folds)
     # nice_plot_group_results(j, x, y, 'avgPPV', computed_mean_CI_avgPPV, 'avgPPV',
     nice_plot_group_results(j, x, y, 'avgPPV', computed_mean_CI_avgPPV, '',
-                            name, num_groups, measure_to_optimize, testNum, 0, 1)
+                            name, num_groups, measure_to_optimize, testNum, 0, 1, dotcolor, curvecolor)
 
     j = np.argmax(computed_mean_CI_AUPRC[:, 0])
     print(f'Max mean_AUPRC   {myround(computed_mean_CI_AUPRC[j, 0]):0.2f} '
@@ -280,26 +324,26 @@ def analyze(testNum, name, iterations):
     j = np.argmax(computed_mean_CI_avgNPV[:, 0])
     print(f'Max mean_avgNPV  {myround(computed_mean_CI_avgNPV[j, 0]):0.2f} '
           f'+/- {myround(computed_mean_CI_avgNPV[j, 1]):0.2f} is at index {j}')
-    x, y = setupPlotData(groupMatrix, avgNPV_i, num_groups, j, total_folds)
+    x, y = setupPlotData(groupMatrix, avgNPV_ix, num_groups, j, total_folds)
     # nice_plot_group_results(j, x, y, 'avgNPV', computed_mean_CI_avgNPV, 'avgNPV',
     nice_plot_group_results(j, x, y, 'avgNPV', computed_mean_CI_avgNPV, '',
-                            name, num_groups, measure_to_optimize, testNum, 0, 1)
+                            name, num_groups, measure_to_optimize, testNum, 0, 1, dotcolor, curvecolor)
 
-    j = np.argmax(computed_mean_CI_cpAUCn1[:, 0])
-    print(f'Max mean_cpAUCn1 {myround(computed_mean_CI_cpAUCn1[j, 0]):0.2f} '
-          f'+/- {myround(computed_mean_CI_cpAUCn1[j, 1]):0.2f} is at index {j}')
-    x, y = setupPlotData(groupMatrix, cpAUCn_i, num_groups, j, total_folds)
-    # nice_plot_group_results(j, x, y, 'cpAUCn_', computed_mean_CI_cpAUCn1, 'cpAUCn.1',
-    nice_plot_group_results(j, x, y, 'cpAUCn_', computed_mean_CI_cpAUCn1, '',
-                            name, num_groups, measure_to_optimize, testNum, 0.4, 0.8)
+    #j = np.argmax(computed_mean_CI_cpAUCn1[:, 0])
+    #print(f'Max mean_cpAUCn1 {myround(computed_mean_CI_cpAUCn1[j, 0]):0.2f} '
+    #      f'+/- {myround(computed_mean_CI_cpAUCn1[j, 1]):0.2f} is at index {j}')
+    #x, y = setupPlotData(groupMatrix, cpAUCn_i, num_groups, j, total_folds)
+    ## nice_plot_group_results(j, x, y, 'cpAUCn_', computed_mean_CI_cpAUCn1, 'cpAUCn.1',
+    #nice_plot_group_results(j, x, y, 'cpAUCn_', computed_mean_CI_cpAUCn1, '',
+    #                        name, num_groups, measure_to_optimize, testNum, 0.4, 0.8, dotcolor, curvecolor)
 
     j = np.argmax(computed_mean_CI_pAUCn1[:, 0])
     print(f'Max mean_pAUCn1  {myround(computed_mean_CI_pAUCn1[j, 0]):0.2f} '
           f'+/- {myround(computed_mean_CI_pAUCn1[j, 1]):0.2f} is at index {j}')
-    x, y = setupPlotData(groupMatrix, pAUCn_i, num_groups, j, total_folds)
+    x, y = setupPlotData(groupMatrix, pAUCn_ix, num_groups, j, total_folds)
     # nice_plot_group_results(j, x, y, 'pAUCn', computed_mean_CI_pAUCn1, 'pAUCn.1',
     nice_plot_group_results(j, x, y, 'pAUCn', computed_mean_CI_pAUCn1, '',
-                            name, num_groups, measure_to_optimize, testNum, 0, 1)
+                            name, num_groups, measure_to_optimize, testNum, 0, 1, dotcolor, curvecolor)
 
     print(' ')
     transcript.stop()

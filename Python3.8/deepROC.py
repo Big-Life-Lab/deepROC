@@ -75,7 +75,7 @@ targetVarColumn     = 'ytest'                       # ytest, yhatTest, yhat, ytr
 #targetVarColumn     = 'yhat'                     # ytest, yhatTest, yhat, ytrain
 
 # specify single test vector input parameters
-singleTestVectorNum = 12  # which of 12 test vectors the function get_ROC_test_scores_labels_ranges below
+singleTestVectorNum = 13  # which of 12 test vectors the function get_ROC_test_scores_labels_ranges below
 
 # choose data science parameters
 rangeAxis           = 'FPR'  # examine ranges (next) by FPR or TPR
@@ -451,6 +451,9 @@ def deepROC(testNum='1',    costs={}, sanityCheckWholeAUC=True,    showPlot=True
         #endif
     #endfor
 
+    if ~quiet:
+        print(' ')
+    #endif
     # code to check for PASS here
     if sanityCheckWholeAUC:
         pass1     = ac.areEpsilonEqual(cDelta_sum, c,   'cDelta_sum', 'c',   ep, quiet)

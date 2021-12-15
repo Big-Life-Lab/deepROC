@@ -25,14 +25,30 @@ import pickle
 import numpy as np
 import transcript
 
+def equal_groups(n):
+    grouplist = []
+    for i in range(0, n):
+        grouplist = grouplist + [[i/n, (i+1)/n]]
+    return grouplist
+#enddef
+
+#testNum        = 30
+#reanalysis     = 'g'
 testNum        = 5
+reanalysis     = ''
 #model         = 'case'
-model          = 'rf0'
-best_iteration = 37  # 0-indexed
-iterations     = 200
-k_folds        = 5
+model          = 'plogrE2'
+best_hyp       = 2   # 0-indexed
+iterations     = 3
+k_folds        = 10
 repetition     = 1
 total_folds    = k_folds * repetition
+groupAxis      = 'FPR'  # FPR (=PercentileNonEvents), TPR (=PercentileEvents), Score, PercentileScore
+deepROC_groups = equal_groups(6)
+#deepROC_groups = [[0, 0.183], [0.183, 1]]  # FPR rf1 035ee
+#deepROC_groups = [[0, 0.173], [0.173, 1]]  # FPR plogr1 035ee
+#deepROC_groups = [[0, 0.178], [0.178, 1]]  # FPR xgb2 035ee
+#deepROC_groups= [[0.0, 1/3], [1/3, 2/3], [2/3, 1.0]]
 
 def formatList(alist):
     # Create a format spec for each item in the input `alist`.
@@ -57,22 +73,29 @@ def formatList(alist):
     return s.format(*alist)
 #enddef
 
-def analyze(testNum, name, iterations, best_iteration):
+def analyze(testNum, name, iterations, best_hyp):
     # example to load results
     if name == 'case':
-        logfn = f'output/analysis-table_{name}{testNum}.txt'
+        logfn = f'output/analysis-table_{name}_{testNum}.txt'
         transcript.start(logfn)
         print(f'results_{name}{testNum}:')
         fileHandle = open(f'output/results_{name}{testNum}.pkl', 'rb')
+        fileHandleS = open(f'output/settings_{testNum}.pkl', 'rb')
     else:
-        logfn = f'output/analysis-table_{name}{testNum:03d}.txt'
+        logfn = f'output/analysis-table_{name}_{testNum:03d}{reanalysis}.txt'
         transcript.start(logfn)
-        print(f'results_{testNum:03d}_{name}:')
-        fileHandle = open(f'output/results_{testNum:03d}_{name}.pkl', 'rb')
+        print(f'results_{testNum:03d}{reanalysis}_{name}:')
+        fileHandle = open(f'output/results_{testNum:03d}{reanalysis}_{name}.pkl', 'rb')
+        fileHandleS = open(f'output/settings_{testNum:03d}.pkl', 'rb')
     #endif
     try:
-        measure_to_optimize, type_to_optimize, deepROC_groups, \
-        groupAxis, areaMeasures, groupMeasures = pickle.load(fileHandle)
+        measure_to_optimize, type_to_optimize, dummy1, \
+        dummy2, areaMeasures, groupMeasures = pickle.load(fileHandleS)
+        fileHandleS.close()
+        del dummy1, dummy2
+
+        [areaMatrix, groupMatrix] = pickle.load(fileHandle)
+        fileHandle.close()
     except:
         print('pickle load failed')
         exit(1)
@@ -85,12 +108,16 @@ def analyze(testNum, name, iterations, best_iteration):
     AUC_micro_i = areaMeasures.index('AUC_micro')
     AUPRC_i     = areaMeasures.index('AUPRC')
     cpAUCn_i    = groupMeasures.index('cpAUCn')
+    pAUC_i      = groupMeasures.index('pAUC')
     pAUCn_i     = groupMeasures.index('pAUCn')
+    pAUCx_i     = groupMeasures.index('pAUCx')
     pAUCxn_i    = groupMeasures.index('pAUCxn')
     cpAUC_i     = groupMeasures.index('cpAUC')
     avgBA_i     = groupMeasures.index('avgBA')
     avgSens_i   = groupMeasures.index('avgSens')
     avgSpec_i   = groupMeasures.index('avgSpec')
+    avgPPV_i    = groupMeasures.index('avgPPV')
+    avgNPV_i    = groupMeasures.index('avgNPV')
     bAvgA_i     = groupMeasures.index('bAvgA')
 
     num_groups         = len(deepROC_groups) + 1
@@ -105,45 +132,81 @@ def analyze(testNum, name, iterations, best_iteration):
 
     # code from https://stackoverflow.com/questions/7568627/using-python-string-formatting-with-lists
     #for i in range(0, iterations+1):
-    for i in range(0, best_iteration+1):
-        #try:
-        [mean_measure, areaMatrix, groupMatrix] = pickle.load(fileHandle)
-        if i < best_iteration:
-            continue
-        print('The following are means of overall/area measures across folds:')
-        print(f'{i:03d}: mean_AUC:        {round(100*mean_measure)/100:0.2f}')
-        def print_mean_CI(measure_name, vector):
-            n              = len(vector)
-            mu             = np.mean(vector)
-            mu_percent     = round(10*100*mu)/10      # percentage rounded to second decimal
-            two_se         = 1.96 * np.std(vector, ddof=1) / np.sqrt(n)  # sample se uses sample std
-            two_se_percent = round(10*100*two_se)/10  # percentage rounded to first  decimal
+    i = best_hyp
+    #print('The following are means of overall/area measures across folds:')
+    #print(f'{i:03d}: mean_AUC:        {round(100*mean_measure)/100:0.2f}')
+    def print_mean_CI(measure_name, vector):
+        global deepROC_groups
+        is_not_nan = lambda a: a[np.invert(np.isnan(a))]
+        new_vector     = is_not_nan(vector)
+        n              = len(new_vector)
+        if n > 0:
+            mu             = np.mean(new_vector)
+            mu_percent     = round(10*100*mu)/10      # percentage rounded to 86.5%
+            #mu_percent     = round(1000*100*mu)/1000      # percentage rounded to 86.523%
+            two_se         = 1.96 * np.std(new_vector, ddof=1) / np.sqrt(n)  # sample se uses sample std
+            if not np.isnan(two_se):
+                two_se_percent = round(10*100*two_se)/10  # percentage rounded to first  decimal
+            else:
+                two_se_percent = np.nan
+            #endif
+            #print(f'     {measure_name:17s} {mu_percent:>5.3f}% +/-{two_se_percent:>4.1f}%  ',
+            #            f'{formatList(list(new_vector))}')
             print(f'     {measure_name:17s} {mu_percent:>5.1f}% +/-{two_se_percent:>4.1f}%  ',
-                  f'{formatList(list(vector))}')
-        #enddef
+                        f'{formatList(list(new_vector))}')
+        else:
+            print(f'     {measure_name:17s}   n/a +/- n/a  ',
+                  f'{formatList(list(new_vector))}')
+        #endif
+    #enddef
 
-        print_mean_CI('mean_AUC_full:', areaMatrix[:,    AUC_full_i, i])
-        print_mean_CI('mean_cpAUC.0:', groupMatrix[:, 0, cpAUC_i,    i])
+    #for i in range(best_hyp, best_hyp+1):
+    for i in range(0, iterations):
+        print(f'{i}:')
+        print_mean_CI('mean_AUC_full:',    areaMatrix[:,     AUC_full_i, i])
+        print_mean_CI('mean_cpAUCn.all:',  groupMatrix[:, 0, cpAUC_i,    i])
+        print_mean_CI(f'mean_pAUCn.all:',  groupMatrix[:, 0, pAUCn_i,    i])
+        print_mean_CI(f'mean_pAUCxn.all:', groupMatrix[:, 0, pAUCxn_i,   i])
+        print_mean_CI(f'mean_avgPPV.all:', groupMatrix[:, 0, avgPPV_i,   i])
+        print_mean_CI(f'mean_avgNPV.all:', groupMatrix[:, 0, avgNPV_i,   i])
         print(' ')
-
-        print('Within each group, the following are means across folds:')
-        for g in range(1, num_groups):
-            print(f'  group {g}')
-            print_mean_CI(f'mean_cpAUCn.{g}:', groupMatrix[:, g, cpAUCn_i,  i])
-            print_mean_CI(f'mean_pAUCn.{g}:',  groupMatrix[:, g, pAUCn_i,   i])
-            print_mean_CI(f'mean_pAUCxn.{g}:', groupMatrix[:, g, pAUCxn_i,  i])
-            print(' ')
-            print_mean_CI(f'mean_bAvgA.{g}:',  groupMatrix[:, g, bAvgA_i,   i])
-            print_mean_CI(f'mean_avgSens.{g}:',groupMatrix[:, g, avgSens_i, i])
-            print_mean_CI(f'mean_avgSpec.{g}:',groupMatrix[:, g, avgSpec_i, i])
-            print(' ')
-            #endfor
-        #except:
-            #break
-        #endtry
     #endfor
-    fileHandle.close()
+
+    print('Within each group, the following are means across folds:')
+    for g in range(1, num_groups):
+        print(f'  group {g}')
+        pAUC   = groupMatrix[:, g, pAUC_i,  i]
+        pAUCn  = groupMatrix[:, g, pAUCn_i,  i]
+        pAUCx  = groupMatrix[:, g, pAUCx_i,  i]
+        pAUCxn = groupMatrix[:, g, pAUCxn_i,  i]
+        # it is easy to get one of delx_v (vector) or dely_v (vector) from deepROC_groups, but not the other
+        # the other varies with each fold's model, hence it is simpler if we obtain the values by reverse engineering
+        # it from between the normalized and non-normalized measures...
+        pAUCn_temp  = pAUCn.copy()
+        pAUCxn_temp = pAUCxn.copy()
+        pAUCn_temp[pAUCn_temp   == 0] = 0.01
+        pAUCxn_temp[pAUCxn_temp == 0] = 0.01
+        delx_v = pAUC  / pAUCn_temp
+        dely_v = pAUCx / pAUCxn_temp
+        print_mean_CI(f'mean_cpAUC.{g}:', groupMatrix[:, g, cpAUC_i,  i])
+        print_mean_CI(f'mean_pAUC.{g}:',  pAUC)
+        print_mean_CI(f'mean_pAUCx.{g}:', pAUCx)
+        new_cpAUCn_i = groupMatrix[:, g, cpAUC_i,  i]
+        new_cpAUCn_i = new_cpAUCn_i / (0.5 * (delx_v + dely_v))
+        print_mean_CI(f'mean_cpAUCn.{g}:', new_cpAUCn_i)
+        #print_mean_CI(f'mean_cpAUCn.{g}:', groupMatrix[:, g, cpAUCn_i,  i])
+        print_mean_CI(f'mean_pAUCn.{g}:',  pAUCn)
+        print_mean_CI(f'mean_pAUCxn.{g}:', pAUCxn)
+        print(' ')
+        print_mean_CI(f'mean_bAvgA.{g}:',  groupMatrix[:, g, bAvgA_i,   i])
+        print_mean_CI(f'mean_avgSens.{g}:',groupMatrix[:, g, avgSens_i, i])
+        print_mean_CI(f'mean_avgSpec.{g}:',groupMatrix[:, g, avgSpec_i, i])
+        print(' ')
+        print_mean_CI(f'mean_avgPPV.{g}:',groupMatrix[:, g, avgPPV_i, i])
+        print_mean_CI(f'mean_avgNPV.{g}:',groupMatrix[:, g, avgNPV_i, i])
+        print(' ')
+    #endfor
     transcript.stop()
 #enddef
 
-analyze(testNum, model, iterations, best_iteration)
+analyze(testNum, model, iterations, best_hyp)

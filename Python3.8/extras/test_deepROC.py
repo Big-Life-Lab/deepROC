@@ -67,24 +67,25 @@ quiet = False
 
 # choose one of the following as input (file supercedes others if multiple):
 useFile             = False
-useSingleTestVector = True
-useAllTestVectors   = False
+useSingleTestVector = False
+useAllTestVectors   = True
 
 # specify file input parameters
 mydata              = ['040', '356', '529', '536', '581', '639', '643']
-fileName            = f'input-matlab/result{mydata[3]}.mat'  # a matlab file (or future: csv file) for input
+fileName            = f'input-matlab/result{mydata[5]}.mat'  # a matlab file (or future: csv file) for input
 scoreVarColumn      = 'yscoreTest'                  # yscoreTest, yscore
 targetVarColumn     = 'ytest'                       # ytest, yhatTest, yhat, ytrain
 #scoreVarColumn      = 'yscore'                   # yscoreTest, yscore
 #targetVarColumn     = 'yhat'                     # ytest, yhatTest, yhat, ytrain
 
 # specify single test vector input parameters
-singleTestVectorNum = 16  # which of 16 test vectors the function get_ROC_test_scores_labels_ranges below
+singleTestVectorNum = 19   # which of 16 test vectors the function get_ROC_test_scores_labels_ranges below
 
 # choose data science parameters
 rangeAxis           = 'FPR'  # examine ranges (next) by FPR or TPR
-filePAUCranges      = [[0.0, 1/3], [1/3, 2/3], [2/3, 1.0]]  # ranges, as few or many as you like
-useCloseRangePoint  = False  # automatically alter the ranges to match with the closest points in data
+filePAUCranges      = [[0.0, 0.2], [0.2, 2/3], [2/3, 1.0]]  # ranges, as few or many as you like
+#filePAUCranges      = [[0.0, 1/3], [1/3, 2/3], [2/3, 1.0]]  # ranges, as few or many as you like
+useCloseRangePoint  = False # automatically alter the ranges to match with the closest points in data
                              # useful if you want the discrete form of balanced accuracy to exactly match
                              # because we don't bother to interpolate that one
 costs               = dict(cFP=1, cFN=1, cTP=0, cTN=0)  # specify relative costs explicitly (default shown)
@@ -93,7 +94,7 @@ rates               = False                             # treat costs as rates, 
 
 # choose what to show
 sanityCheckWholeAUC = True
-showPlot            = True
+showPlot            = False
 showData            = False
 showError           = False     # areas in ROC plots that represent error
 
@@ -317,7 +318,10 @@ def get_ROC_test_scores_labels_ranges(testNum):
                    0.46, 0.45, 0.44, 0.43, 0.40, 0.2]
         labels = [    1,    1,    0,    1,    1,    1,    0,    0,    1,    0,   1,    0,    1,    0,
                       0,    0,    1,    0,    1,   0]
-        pAUCranges = [[0.0, 0.17], [0.17, 0.52], [0.52, 1.0]]
+        #pAUCranges = [[0.0, 0.17], [0.17, 0.52], [0.52, 1.0]]
+        #pAUCranges = [[0.0, 0.3], [0.3, 0.5], [0.5, 1.0]]
+        #pAUCranges = [[0.8, 1.0]]
+        pAUCranges = [[0.4, 0.6]]
     #endif
 
     elif testNum == 9:  # old testNum 9
@@ -374,6 +378,33 @@ def get_ROC_test_scores_labels_ranges(testNum):
         scores = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1]  # 3d
         labels = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 3d
         pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
+
+    elif testNum == 17:  # first test of hypothesis on group AUC < AUC
+        descr = 'Test 17. Hypothesis test re smaller group AUC'
+        # creating ROC: (0,0), (0.33,0.6), (0.66,0.9), (1,1)
+        # x ascends by thirds        - do 9  actual negatives
+        # y ascends by 0.6, 0.3, 0.1 - do 10 actual positives
+        # 3 sets of ties with scores: h=0.8, m=0.5, l=0.2
+        h=0.8;  m=0.5;  l=0.2
+        scores = [h, h, h, h, h, h, h, h, h, m, m, m, m, m, m, l, l, l, l].copy()
+        labels = [1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0]
+        pAUCranges = [[0.0, 1.0/3.0], [1.0/3.0, 2.0/3.0], [2.0/3.0, 1.0]]
+
+    elif testNum == 18:  # second test of hypothesis on group AUC < AUC
+        descr = 'Test 18. Hypothesis test flipped re smaller group AUC'
+        # similar to test 17 except labels and scores flipped
+        # creating ROC: (0,0), (0.33,0.1), (0.66,0.4), (1,1)
+        h=0.8;  m=0.5;  l=0.2
+        scores = [l, l, l, l, l, l, l, l, l, m, m, m, m, m, m, h, h, h, h].copy()
+        labels = [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1]
+        pAUCranges = [[0.0, 1.0/3.0], [1.0/3.0, 2.0/3.0], [2.0/3.0, 1.0]]
+
+    elif testNum == 19:  # second test of hypothesis on group AUC < AUC
+        descr = 'Test 19. Testing'
+        h = 0.8; m = 0.5; l = 0.2
+        scores = [h, h, h, h, h, m, m, m, m, m, m, m, m, l, l, l ].copy()
+        labels = [0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1 ]
+        pAUCranges = [[0.0, 1.0 / 3.0], [1.0 / 3.0, 2.0 / 3.0], [2.0 / 3.0, 1.0]]
 
     else:
         raise ValueError('Not a valid built-in test number.')
