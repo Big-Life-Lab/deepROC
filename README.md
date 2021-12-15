@@ -21,8 +21,8 @@ An example (under extras) of calling the function can be found in:
 test_deepROC.py  
   
 Analysis can be performed with:  
-analyze15.py  
-compare15.py  
+analyze.py
+reanalyze.py
 analyze-table.py  
 
 ## Examples/explanations of inputs to deepROC
