@@ -77,53 +77,46 @@ from   sklearn                  import metrics
 #import time
 import math
 
+# c_statistic(posScores, negScores):
+# discrete_partial_roc_measures(partial_fpr, partial_tpr, partial_labels, \
+#                               n_negatives, n_positives, n_negatives_population, n_positives_population):
+# continuous_partial_roc_measures(partial_fpr, partial_tpr, quiet):
+
 def c_statistic(posScores, negScores):
-    ''' c_statistic computes the cStatistic given a vector of scores for actual positives
-        and a vector of scores for actual negatives in the ROC data '''
+    ''' Compute the C statistic from scores for positives and scores for negatives. '''
     P = len(posScores)
     N = len(negScores)
-    c = 0
+    C = 0
     for j in range(0, P):
         for k in range(0, N):
-            c = c + Heaviside(posScores[j]-negScores[k])
+            C = C + Heaviside(posScores[j]-negScores[k])
         #endfor
     #endfor
-    c = c / (P * N)
-    return c
+    C = C / (P * N)
+    return C
 #enddef
 
-def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet):
-    '''This function computes the partial discrete measures using \n
-       "full ROC" data, i.e., which includes internal points on \n
-       horizontal, vertical and sloped emprical line segments. These \n
-       measures include: \n
-       - average balanced accuracy \n
-       - average sensitivity \n
-       - average specificity \n
-       - average accuracy \n
-       '''
-    # This function requires points generated from the getFullROC function
-    # All computations, sens and spec, start from the bottom left
+#def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP):
+def discrete_partial_roc_measures(partial_fpr, partial_tpr, partial_labels,
+                              n_negatives, n_positives, n_negatives_population, n_positives_population):
+    '''Compute the discrete partial ROC measures using "full ROC" data (see getFullROC): \n
+       average sensitivity (average recall), average specificity, balanced average accuracy \n
+       (equal to the partial C statistic), average positive predictive value (average precision), \n
+       average negative predictive value, average likelihood ratio positive, average likelihood
+       ratio negative, average odds ratio, average accuracy, average balanced accuracy.\n '''
 
-    pi_neg        = N / (P+N)
-    pi_pos        = P / (P+N)
-    pi_neg_global = globalN / (globalP+globalN)
-    pi_pos_global = globalP / (globalP+globalN)
-    sumSensArea   = 0
-    sumSpecArea   = 0
-    sumPPVArea    = 0
-    sumNPVArea    = 0
-    sumLRpArea    = 0
-    sumLRnArea    = 0
-    sumORArea     = 0
-    sum_BA_Area   = 0
-    sum_A_Area    = 0
-    delx          = 0
-    dely          = 0
-    lastfpr       = float(pfpr[0])
-    lasttpr       = float(ptpr[0])
+    pi_neg        = n_negatives / (n_positives + n_negatives)
+    pi_pos        = n_positives / (n_positives + n_negatives)
+    pi_neg_pop    = n_negatives_population / (n_positives_population + n_negatives_population)
+    pi_pos_pop    = n_positives_population / (n_positives_population + n_negatives_population)
+    sumSensArea, sumSpecArea, sumPPVArea,  sumNPVArea, sumLRpArea      = [0, 0, 0, 0, 0]
+    sumLRnArea,  sumORArea,   sum_BA_Area, sum_A_Area, delx,      dely = [0, 0, 0, 0, 0, 0]
+    lastfpr       = float(partial_fpr[0])
+    lasttpr       = float(partial_tpr[0])
+
+    # All computations, start from the bottom left of the ROC plot
     # omit the first point in the region, it has no area/weight
-    for fpr, tpr, label in zip(pfpr[1:], ptpr[1:], plabel[1:]):
+    for fpr, tpr, label in zip(partial_fpr[1:], partial_tpr[1:], partial_labels[1:]):
         ldely       =  tpr - lasttpr
         ldelx       =  fpr - lastfpr
 
@@ -138,10 +131,10 @@ def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)
         # for avgBA, avgA, avgPPV, avgNPV, avgLRp, avgLRn -- all using ldelw=(ldelx + ldely) an L1 distance
         sum_BA_Area = sum_BA_Area + ((avgtpr + (1-avgfpr))/2)                    * (ldelx + ldely)
         sum_A_Area  = sum_A_Area  + (pi_pos * avgtpr     + pi_neg * (1-avgfpr))  * (ldelx + ldely)
-        sumPPVArea  = sumPPVArea  +((pi_pos_global * avgtpr) \
-                                  / (pi_pos_global * avgtpr     + pi_neg_global * avgfpr))     * (ldelx + ldely)
-        sumNPVArea  = sumNPVArea  +((pi_neg_global * (1-avgfpr)) \
-                                  / (pi_neg_global * (1-avgfpr) + pi_pos_global * (1-avgtpr))) * (ldelx + ldely)
+        sumPPVArea  = sumPPVArea  +((pi_pos_pop * avgtpr)
+                                  / (pi_pos_pop * avgtpr     + pi_neg_pop * avgfpr))     * (ldelx + ldely)
+        sumNPVArea  = sumNPVArea  +((pi_neg_pop * (1-avgfpr))
+                                  / (pi_neg_pop * (1-avgfpr) + pi_pos_pop * (1-avgtpr))) * (ldelx + ldely)
         if avgfpr == 0:
             sumLRpArea  = np.inf
         else:
@@ -167,54 +160,22 @@ def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)
         avgSens = (1/delx) * sumSensArea
     else:
         # avgSens is usually defined as the average height for the partial area in the range of delx.
-        # When delx==0 there is no "area", but there are points along a vertical line where for
-        # evenly distributed points the average is halfway up the vertical line. This is acceptable
-        # for a normalized measure: avgSens = normalized (pAUC) = pAUCn; whereas the non-normalized
-        # measure pAUC requires an area and is zero otherwise.
-        #avgSens = (float(ptpr[-1]) + float(ptpr[0])) / 2
-        #avgSens  = np.nan
+        # When delx==0 there is no "area"
         avgSens  = 0
-        #if not quiet:
-        #    print('Warning: nan value included in results, remove them prior to mean/sum etc')
-        ##endif
     #endif
     if dely > 0:
         avgSpec = (1/dely) * sumSpecArea
     else:
         # avgSpec is usually defined as the average width (from right) for the partial area in the range
-        # of dely.  When dely==0 there is no "area", but there are points along a horizontal line where for
-        # evenly distributed points the average is halfway across the horizontal line. This is acceptable
-        # for a normalized measure: avgSpec = normalized (pAUCx) = pAUCxn; whereas the non-normalized
-        # measure pAUCx requires an area and is zero otherwise.
-        #avgSpec = (1-float(pfpr[-1]) + 1-float(pfpr[0])) / 2
-        #avgSpec = np.nan
+        # of dely.  When dely==0 there is no "area"
         avgSpec = 0
-        #if not quiet:
-        #    print('Warning: nan value included in results, remove them prior to mean/sum etc')
-        ##endif
     #endif
-
-    bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
-    ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
-    #if       np.isnan(avgSens) and not np.isnan(avgSpec):
-    #    bAvgA  = avgSpec  # unweighted (balanced) average of one element, is the element
-    #    ubAvgA = avgSpec  # weighted average of one element, is the element
-    #elif not np.isnan(avgSens) and     np.isnan(avgSpec):
-    #    bAvgA  = avgSens  # unweighted (balanced) average of one element, is the element
-    #    ubAvgA = avgSens  # weighted average of one element, is the element
-    #elif not np.isnan(avgSens) and not np.isnan(avgSpec):
-    #    bAvgA  = (1/2)  * avgSens + (1/2)  * avgSpec
-    #    ubAvgA = pi_pos * avgSens + pi_neg * avgSpec
-    #else:
-    #    bAvgA  = np.nan
-    #    ubAvgA = np.nan
-    ##endif
 
     sumdel  = delx + dely
     if sumdel == 0:
-        #avgBA, avgA, avgPPV, avgNPV, avgLRp, avgLRn = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]
-        avgBA, avgA, avgPPV, avgNPV, avgLRp, avgLRn, avgOR = [0, 0, 0, 0, 1, 1, 1]
+        bAvgA, avgBA, avgA, avgPPV, avgNPV, avgLRp, avgLRn, avgOR = [0, 0, 0, 0, 0, 1, 1, 1]
     else:
+        bAvgA   = (delx/sumdel) * avgSens + (dely/sumdel) * avgSpec
         avgBA   = (1/sumdel)  * sum_BA_Area
         avgA    = (1/sumdel)  * sum_A_Area
         avgPPV  = (1/sumdel)  * sumPPVArea
@@ -224,96 +185,79 @@ def discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)
         avgOR   = (1/sumdel)  * sumORArea
     #endif
 
-    measures_dict = {'bAvgA': bAvgA, 'avgSens': avgSens, 'avgSpec': avgSpec, \
-                     'ubAvgA': ubAvgA, 'avgA': avgA, 'avgBA': avgBA, \
-                     'avgPPV': avgPPV, 'avgNPV': avgNPV, 'avgLRp': avgLRp, 'avgLRn': avgLRn, 'avgOR': avgOR}
+    measures_dict = { 'avgSens': avgSens, 'avgSpec': avgSpec,
+                      'avgPPV': avgPPV,   'avgNPV': avgNPV,
+                      'avgLRp': avgLRp,   'avgLRn': avgLRn,
+                      'bAvgA': bAvgA,     'avgOR': avgOR,     'avgA': avgA,   'avgBA': avgBA}
     return measures_dict
 #enddef
 
-def concordant_partial_AUC(pfpr, ptpr, quiet):
+#def concordant_partial_AUC(partial_fpr, partial_tpr, quiet):
+def continuous_partial_auc_measures(partial_fpr, partial_tpr, quiet):
     ''' Computes the concordant partial area under the curve and alternatives, given arrays of \n
     "partial fpr" and "partial tpr" values.  These arrays only contain points on the partial curve \n
     and the trapezoidal rule is used to compute areas with these points. \n
     \n
-    pAUCc:      the concordant partial area under the curve \n
-    pAUC:       the (vertical) partial area under the curve \n
-    pAUCx:      the horizontal partial area under the curve \n
-
-    pAUCc_norm: the concordant partial area under the curve normalized \n
-    pAUC_norm:  the (vertical) partial area under the curve normalized \n
-    pAUCx_norm: the horizontal partial area under the curve normalized \n
+    pAUCc:  the concordant partial area under the curve \n
+    pAUC:   the (vertical) partial area under the curve \n
+    pAUCx:  the horizontal partial area under the curve \n
+    \n
+    pAUCcn: the normalized concordant partial area under the curve \n
+    pAUCn:  the normalized (vertical) partial area under the curve \n
+    pAUCxn: the normalized horizontal partial area under the curve \n
     '''
 
     # xrange [a,b]
-    a    = float(pfpr[0])
-    b    = float(pfpr[-1])
+    a    = float(partial_fpr[0])
+    b    = float(partial_fpr[-1])
     delx = b - a
     vertical_stripe_area = (1 * delx)
 
     # yrange [f,g]
-    f    = float(ptpr[0])
-    g    = float(ptpr[-1])
+    f    = float(partial_tpr[0])
+    g    = float(partial_tpr[-1])
     dely = g - f
     horizontal_stripe_area = (dely * 1)
 
     if delx == 0:
         if not quiet:
-            print("Warning: For pAUC and pAUCc the width (delx) of the vertical column is zero.")
+            print("Warning: For pAUC and AUC_i the width (delx) of the vertical column is zero.")
         #endif
-        pAUC  = 0       # contribution to AUC from pAUC is zero, for region with no width or area
-
-        # avgSens is usually defined as the average height for the partial area in the range of delx.
-        # When delx==0 there is no "area", but there are points along a vertical line where for
-        # evenly distributed points the average is halfway up the vertical line. This is acceptable
-        # for a normalized measure: avgSens = normalized (pAUC) = pAUCn; whereas the non-normalized
-        # measure pAUC requires an area and is zero otherwise.
-        #pAUCn = (f+g)/2
-        #pAUCn = np.nan
-        pAUCn  = 0
+        # for a region with no width or area...
+        pAUC  = 0  # contribution to AUC from pAUC is zero
+        pAUCn = 0  # contribution to pAUCn (= avgSens) is zero
     else:
         # Compute the partial AUC mathematically defined in (Dodd and Pepe, 2003) and conceptually defined in
         #   (McClish, 1989; Thompson and Zucchini, 1989). Use the trapezoidal rule to compute the integral.
-        pAUC  = np.trapz(ptpr, pfpr)  # trapz is y,x
+        pAUC  = np.trapz(partial_tpr, partial_fpr)  # trapz is y,x
         pAUCn = pAUC / vertical_stripe_area
     #endif
 
     if dely == 0:
         if not quiet:
-            print("Warning: For pAUCx and pAUCc the height (dely) of the horizontal stripe is zero.")
+            print("Warning: For pAUCx and AUC_i the height (dely) of the horizontal stripe is zero.")
         #endif
-        pAUCx  = 0       # contribution to AUC from pAUC is zero, for region with no height or area
-
-        # pAUCxn (avgSpec) is usually defined as the average width (from right) for the partial area in the range
-        # of dely.  When dely==0 there is no "area", but there are points along a horizontal line where for
-        # evenly distributed points the average is halfway across the horizontal line. This is acceptable
-        # for a normalized measure: avgSpec = normalized (pAUCx) = pAUCxn; whereas the non-normalized
-        # measure pAUCx requires an area and is zero otherwise.
-        #pAUCxn = (1-a+1-b)/2
-        #pAUCxn = np.nan
-        pAUCxn  = 0
+        # for a region with no width or area...
+        pAUCx  = 0  # contribution to AUC from pAUCx is zero
+        pAUCxn = 0  # contribution to pAUCxn (= avgSpec) is zero
     else:
         # Compute the horizontal partial AUC (pAUCx) defined in (Carrington et al, 2020) and as
-        # suggested by (Walter, 2005) and similar to the partial area index (PAI)
-        # (Nishikawa et al, ?) although PAI has a fixed right boundary instead and a slightly
-        # different mathematical definition.
-        #
+        # suggested by (Walter, 2005) and similar to the partial area index (PAI) (Jiang et al, ?)
         # Normally we would compute the area to the right of the curve, the horizontal integral,
         # as follows:
         #   1. swap the axes
         #   2. flip the direction of the new vertical
         #   3. compute the (vertical) integral
-        #
-        tempX  = ptpr                      # swap the axes
-        tempY  = list(1 - np.array(pfpr))  # flip the direction
-        pAUCx  = np.trapz(tempY, tempX)    # trapz is y,x
+        tempX  = partial_tpr                      # swap the axes
+        tempY  = list(1 - np.array(partial_fpr))  # flip the direction
+        pAUCx  = np.trapz(tempY, tempX)           # trapz is y,x
         pAUCxn = pAUCx / horizontal_stripe_area
     #endif
 
     pAUCc  = (1/2)*pAUCx + (1/2)*pAUC  # the complexity is in the derivation, meaning/generalization
-                                       #   and relation to the c and partial c statistic, not the
-                                       #   formula which looks like a simple average
+                                       # and relation to the c and partial c statistic, not the
+                                       # formula which looks like a simple average
 
-    # OLD overall normalization:
     total_for_norm = vertical_stripe_area + horizontal_stripe_area
     if total_for_norm == 0:
         pAUCcn = 0
@@ -321,20 +265,6 @@ def concordant_partial_AUC(pfpr, ptpr, quiet):
     else:
         pAUCcn= (pAUCx + pAUC) / total_for_norm
     #endif
-
-    # NEW piece-wise normalization:
-    #pAUCcn = (1/2) * pAUCn + (1/2) * pAUCxn
-
-    # NOT USED:
-    #if   not np.isnan(pAUCn) and not np.isnan(pAUCxn):
-    #    pAUCcn = (1/2) * pAUCn + (1/2) * pAUCxn
-    #elif     np.isnan(pAUCn) and not np.isnan(pAUCxn):
-    #    pAUCcn = pAUCxn
-    #elif not np.isnan(pAUCn) and     np.isnan(pAUCxn):
-    #    pAUCcn = pAUCn
-    #else:
-    #    pAUCcn = np.nan
-    ##endif
 
     return pAUCc, pAUC, pAUCx, pAUCcn, pAUCn, pAUCxn
 #enddef
@@ -976,7 +906,7 @@ def getFullROC(labels, scores, posclass):
     firstTieIndex = 0
 
     def addStandardROCpoint(ffpr, ftpr, fthresh, thisTP, thisFP, index, tPrev):
-        print(f'numFP, numTP, len(ffpr), index, tPrev = {numFP, numTP, len(ffpr), index, tPrev}')
+        #print(f'numFP, numTP, len(ffpr), index, tPrev = {numFP, numTP, len(ffpr), index, tPrev}')
         ftpr[index]    = thisTP / numTP  # first time here is (0, 0) with thresh Inf
         ffpr[index]    = thisFP / numFP
         fthresh[index] = tPrev
@@ -1312,7 +1242,7 @@ def plotPartialArea(pfpr, ptpr, showError):
     SEpoint_xStripe = [1, ptpr[0] ]
     #
     # take sequences of x and y (horizontal or vertical) and plot them...
-    plotLine   = lambda x, y: plt.plot(x, y, 'k--',    color=(0.5, 0.5, 0.5),   linewidth=1.5)
+    plotLine   = lambda x, y: plt.plot(x, y, '--',    color=(0.5, 0.5, 0.5),   linewidth=1.5)
     plotpAUCy  = lambda x, y: plt.fill(x, y, 'xkcd:yellow', alpha=0.5,          linewidth=None)
     plotpAUCx  = lambda x, y: plt.fill(x, y, 'b',      alpha=0.4,               linewidth=None)
     plotClear  = lambda x, y: plt.fill(x, y, 'w',                               linewidth=None)
@@ -1481,14 +1411,14 @@ def Heaviside(x):
 def get_plabel(fnewlabel, matchedIndices, approxIndices, quiet):
     if matchedIndices[0] == 'NA':
         if not quiet:
-            print('Warning: for avgBA using an approximate left  label (no interpolation)')
+            print('Warning: the following 9 measures use an approximate left  label (no interpolation)')
         left = approxIndices[0]
     else:
         left = matchedIndices[0]
     #endif
     if matchedIndices[1] == 'NA':
         if not quiet:
-            print('Warning: for avgBA using an approximate right label (no interpolation)')
+            print('Warning: the following 9 measures use an approximate right label (no interpolation)')
         right = approxIndices[1]
     else:
         right = matchedIndices[1]
@@ -1743,22 +1673,29 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
         extras_dict.update({'c': c})
     #endif
 
-    cDelta, cDeltan, cLocal, cp1, cn1, cp2, cn2, cp, cn, \
+    dummy = 0
+    #cDelta, cDeltan, cLocal, cp1, cn1, cp2,      cn2,      cp,      cn, \
+    C_part, Cn_part, Clocal, dummy, dummy, Cnx_part, Cny_part, Ux_part, Uy_part, \
     whole_area, horizontal_stripe_area, vertical_stripe_area \
         = partial_c_statistic(posScores, negScores, posWeights, negWeights, posIndexC, negIndexC)
     if not quiet:
-        print(f"{'cn (~pAUC)':12s} = {cn1:0.4f}    from {cn:0.2f}/{whole_area:0.2f}")
-        print(f"{'cp (~pAUCx)':12s} = {cp1:0.4f}    from {cp:0.2f}/{whole_area:0.2f}")
-        print(f"{'cDelta':12s} = {cDelta:0.4f}")
-        print(f"{'cn2 (~pAUCn)':12s} = {cn2:0.4f}    from {cn:0.2f}/{vertical_stripe_area:0.2f}")
-        print(f"{'cp2 (~pAUCxn)':12s}= {cp2:0.4f}    from {cp:0.2f}/{horizontal_stripe_area:0.2f}")
-        print(f"{'cDeltan':12s} = {cDeltan:0.4f}")
-        print(f"{'cLocal':12s} = {cLocal:0.4f}")
+        print(f"{'Uy_i':18s} = {Uy_part:0.2f}     re Cy_i (~pAUC)  = {Uy_part:0.2f}/{whole_area:0.2f}")
+        print(f"{'Ux_i':18s} = {Ux_part:0.2f}     re Cx_i (~pAUCx) = {Ux_part:0.2f}/{whole_area:0.2f}")
+        print(f"{'C_i   (~AUC_i)':18s} = {C_part:0.4f}")
+
+        print(f"{'Cny_i (~pAUCn)':18s} = {Cny_part:0.4f}    from {Uy_part:0.2f}/{vertical_stripe_area:0.2f}")
+        print(f"{'Cnx_i (~pAUCxn)':18s} = {Cnx_part:0.4f}    from {Ux_part:0.2f}/{horizontal_stripe_area:0.2f}")
+        print(f"{'Cn_i  (~AUCn_i)':18s} = {Cn_part:0.4f}")
+        print(f"{'Clocal':18s} = {Clocal:0.4f}")
         print(' ')
     #endif
 
+    # c_statistic(posScores, negScores):
+    # discrete_partial_roc_measures(partial_fpr, partial_tpr, partial_labels, \
+    #                               n_negatives, n_positives, n_negatives_population, n_positives_population):
+    # continuous_partial_roc_measures(partial_fpr, partial_tpr, quiet):
     cpAUC, pAUC, pAUCx, cpAUCn, pAUCn, pAUCxn \
-        = concordant_partial_AUC(pfpr, ptpr, quiet)
+        = continuous_partial_auc_measures(pfpr, ptpr, quiet)
 
     if index == 0:
         #AUC = metrics.auc(ffpr, ftpr)   # do not use this general auc function because it sometimes gives an error:
@@ -1789,16 +1726,16 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
     if not quiet:
         print(f"{'pAUC':12s} = {pAUC:0.4f}")
         print(f"{'pAUCx':12s} = {pAUCx:0.4f}")
-        print(f"{'cpAUC':12s} = {cpAUC:0.4f}")
+        print(f"{'AUC_i':12s} = {cpAUC:0.4f}")
         print(f"{'pAUCn':12s} = {pAUCn:0.4f}")
         print(f"{'pAUCxn':12s} = {pAUCxn:0.4f}")
-        print(f"{'cpAUCn':12s} = {cpAUCn:0.4f}")
+        print(f"{'AUCn_i':12s} = {cpAUCn:0.4f}")
         print(' ')
     #endif
     sPA = standardized_partial_area_proxy(pfpr, ptpr, quiet)
     extras_dict.update({'sPA': sPA})
     if not quiet:
-        print(f"{'sPA':12s} = {sPA:0.4f}")
+        print(f"{'sPA':12s} = {sPA:0.4f}\n")
     #endif
 
     # population values globalN and globalP are passed in (not the test sample, nor the group sample)
@@ -1809,7 +1746,7 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
     P       = float(sum(posWeights)) # group sample
 
     plabel  = get_plabel(fnewlabel, matchedIndices, approxIndices, quiet)
-    measure_dict = discrete_deeproc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP, quiet)
+    measure_dict = discrete_partial_roc_measures(pfpr, ptpr, plabel, N, P, globalN, globalP)
     extras_dict.update(measure_dict)
     if not quiet:
         print(f"{'bAvgA':12s} = {measure_dict['bAvgA']:0.4f}")
@@ -1824,7 +1761,6 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
     #endif
     showAllMeasures = True
     if showAllMeasures and not quiet:
-        print(f"{'ubAvgA':12s} = {measure_dict['ubAvgA']:0.4f}")
         print(f"{'avgA':12s} = {measure_dict['avgA']:0.4f}")
         print(f"{'avgBA':12s} = {measure_dict['avgBA']:0.4f}")
         print(' ')
@@ -1842,12 +1778,20 @@ def do_pAUCc(mode='',          index=1,         pAUCrange=[],
     #endif
 
     # check for expected equalities
-    pass1 = areEpsilonEqual(cDelta,                   cpAUC,  'cDelta',    'cpAUC',  ep, quiet)
-    #pass2 = areEpsilonEqual(extras_dict['bAvgA'],    cpAUCn, 'bAvgA',     'cpAUCn', ep, quiet)
-    pass2 = areEpsilonEqual(cDeltan,                  cpAUCn, 'cDeltan',   'cpAUCn', ep, quiet)
-    pass3 = areEpsilonEqual(extras_dict['avgSens'],   pAUCn,  'avgSens',   'pAUCn',  ep, quiet)
-    pass4 = areEpsilonEqual(extras_dict['avgSpec'],   pAUCxn, 'avgSpec',   'pAUCxn', ep, quiet)
+    pass1 = areEpsilonEqual(C_part,                   cpAUC,  'C_i',       'AUC_i',  ep, quiet)
+    pass2 = areEpsilonEqual(Cn_part,                  cpAUCn, 'Cn_i',      'AUCn_i', ep, quiet)
+    if matchedIndices[0] != 'NA' and matchedIndices[1] != 'NA':
+        pass3 = areEpsilonEqual(extras_dict['bAvgA'],     cpAUCn, 'bAvgA',     'AUCn_i', ep, quiet)
+        pass4 = areEpsilonEqual(extras_dict['avgSens'],   pAUCn,  'avgSens',   'pAUCn',  ep, quiet)
+    pass5 = areEpsilonEqual(Cny_part,                 pAUCn,  'Cny_i',     'pAUCn',  ep, quiet)
+    if matchedIndices[0] != 'NA' and matchedIndices[1] != 'NA':
+        pass6 = areEpsilonEqual(extras_dict['avgSpec'],   pAUCxn, 'avgSpec',   'pAUCxn', ep, quiet)
+    pass7 = areEpsilonEqual(Cnx_part,                 pAUCxn, 'Cnx_i',     'pAUCxn', ep, quiet)
 
-    iterationPassed = pass1 and pass2 and pass3 and pass4
-    return iterationPassed, cDelta, cpAUC, pAUC, pAUCx, cDeltan, cpAUCn, pAUCn, pAUCxn, extras_dict
+    if matchedIndices[0] != 'NA' and matchedIndices[1] != 'NA':
+        iterationPassed = pass1 and pass2 and pass3 and pass4 and pass5 and pass6 and pass7
+    else:
+        iterationPassed = pass1 and pass2 and pass5 and pass7
+    #endif
+    return iterationPassed, C_part, cpAUC, pAUC, pAUCx, Cn_part, cpAUCn, pAUCn, pAUCxn, extras_dict
 #enddef

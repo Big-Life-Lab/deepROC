@@ -18,7 +18,7 @@ import deepROC as ac
 Then call the deepROC function with appropriate inputs:  
 results, EQresults = ac.deepROC(*kwargs)  
   
-An example (under extras) of calling the function can be found in:  
+An example of calling the function can be found in:  
 test_deepROC.py  
   
 Analysis can be performed with:  

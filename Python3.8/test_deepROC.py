@@ -63,12 +63,12 @@
 
 global quiet, resultFile
 
-quiet = False
+quiet   = False
 
 # choose one of the following as input (file supercedes others if multiple):
 useFile             = False
-useSingleTestVector = False
-useAllTestVectors   = True
+useSingleTestVector = True
+useAllTestVectors   = False
 
 # specify file input parameters
 mydata              = ['040', '356', '529', '536', '581', '639', '643']
@@ -79,11 +79,11 @@ targetVarColumn     = 'ytest'                       # ytest, yhatTest, yhat, ytr
 #targetVarColumn     = 'yhat'                     # ytest, yhatTest, yhat, ytrain
 
 # specify single test vector input parameters
-singleTestVectorNum = 19   # which of 16 test vectors the function get_ROC_test_scores_labels_ranges below
+singleTestVectorNum = 1   # which test vectors in the function: get_ROC_test_scores_labels_ranges
 
 # choose data science parameters
 rangeAxis           = 'FPR'  # examine ranges (next) by FPR or TPR
-filePAUCranges      = [[0.0, 0.2], [0.2, 2/3], [2/3, 1.0]]  # ranges, as few or many as you like
+filePAUCranges      = [[0.0, 1/3], [1/3, 2/3], [2/3, 1.0]]  # ranges, as few or many as you like
 #filePAUCranges      = [[0.0, 1/3], [1/3, 2/3], [2/3, 1.0]]  # ranges, as few or many as you like
 useCloseRangePoint  = False # automatically alter the ranges to match with the closest points in data
                              # useful if you want the discrete form of balanced accuracy to exactly match
@@ -94,7 +94,7 @@ rates               = False                             # treat costs as rates, 
 
 # choose what to show
 sanityCheckWholeAUC = True
-showPlot            = False
+showPlot            = True
 showData            = False
 showError           = False     # areas in ROC plots that represent error
 
@@ -318,10 +318,10 @@ def get_ROC_test_scores_labels_ranges(testNum):
                    0.46, 0.45, 0.44, 0.43, 0.40, 0.2]
         labels = [    1,    1,    0,    1,    1,    1,    0,    0,    1,    0,   1,    0,    1,    0,
                       0,    0,    1,    0,    1,   0]
-        #pAUCranges = [[0.0, 0.17], [0.17, 0.52], [0.52, 1.0]]
+        pAUCranges = [[0.0, 0.17], [0.17, 0.52], [0.52, 1.0]]
         #pAUCranges = [[0.0, 0.3], [0.3, 0.5], [0.5, 1.0]]
         #pAUCranges = [[0.8, 1.0]]
-        pAUCranges = [[0.4, 0.6]]
+        #pAUCranges = [[0.4, 0.6]]
     #endif
 
     elif testNum == 9:  # old testNum 9
@@ -379,8 +379,8 @@ def get_ROC_test_scores_labels_ranges(testNum):
         labels = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # 3d
         pAUCranges = [[0.0, 0.2], [0.2, 0.5], [0.5, 1.0]]
 
-    elif testNum == 17:  # first test of hypothesis on group AUC < AUC
-        descr = 'Test 17. Hypothesis test re smaller group AUC'
+    elif testNum == 17:
+        descr = 'Test 17. Hypothesis test re smaller group AUCnn_i'
         # creating ROC: (0,0), (0.33,0.6), (0.66,0.9), (1,1)
         # x ascends by thirds        - do 9  actual negatives
         # y ascends by 0.6, 0.3, 0.1 - do 10 actual positives
@@ -390,8 +390,8 @@ def get_ROC_test_scores_labels_ranges(testNum):
         labels = [1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0]
         pAUCranges = [[0.0, 1.0/3.0], [1.0/3.0, 2.0/3.0], [2.0/3.0, 1.0]]
 
-    elif testNum == 18:  # second test of hypothesis on group AUC < AUC
-        descr = 'Test 18. Hypothesis test flipped re smaller group AUC'
+    elif testNum == 18:
+        descr = 'Test 18. Hypothesis test flipped re smaller group AUCnn_i'
         # similar to test 17 except labels and scores flipped
         # creating ROC: (0,0), (0.33,0.1), (0.66,0.4), (1,1)
         h=0.8;  m=0.5;  l=0.2
@@ -399,15 +399,23 @@ def get_ROC_test_scores_labels_ranges(testNum):
         labels = [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1]
         pAUCranges = [[0.0, 1.0/3.0], [1.0/3.0, 2.0/3.0], [2.0/3.0, 1.0]]
 
-    elif testNum == 19:  # second test of hypothesis on group AUC < AUC
+    elif testNum == 19:
         descr = 'Test 19. Testing'
         h = 0.8; m = 0.5; l = 0.2
         scores = [h, h, h, h, h, m, m, m, m, m, m, m, m, l, l, l ].copy()
         labels = [0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1 ]
         pAUCranges = [[0.0, 1.0 / 3.0], [1.0 / 3.0, 2.0 / 3.0], [2.0 / 3.0, 1.0]]
 
+    elif testNum == 20:
+        descr = 'Test 20. Example output from a decision tree'
+        h = 1; l = 0
+        scores = [h, h, h, h, h, l, l, l, l, l, l, l, l, l, l, l].copy()
+        labels = [0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1]
+        pAUCranges = [[0.0, 1.0 / 3.0], [1.0 / 3.0, 2.0 / 3.0], [2.0 / 3.0, 1.0]]
+
     else:
         raise ValueError('Not a valid built-in test number.')
+
     return scores, labels, pAUCranges, descr
 #enddef
 
@@ -457,48 +465,57 @@ def calibrationOK(numScores, bins):
         return 0
 #endif
 
-def doCalibration(scores, labels, posclass, fileNum):
+def doCalibration(scores, labels, posclass, fileNum, showPlot, quiet):
 
-    scores, newlabels, labels = ac.sortScoresFixLabels(scores, labels, posclass, True) # True = ascending
+    scores, newlabels, labels = ac.sortScoresFixLabels(scores, labels, posclass, True)  # True = ascending
 
-    maxScore  = float(max(scores))
-    minScore  = float(min(scores))
-    print(f'Before: min,max = {minScore},{maxScore}')
+    maxScore = float(max(scores))
+    minScore = float(min(scores))
+    if not quiet:
+        print(f'Before: min,max = {minScore},{maxScore}')
+    # endif
     scores_np = (np.array(scores) - minScore) / (maxScore - minScore)
-    maxScore  = float(max(scores_np))
-    minScore  = float(min(scores_np))
-    print(f'After: min,max = {minScore},{maxScore}')
+    maxScore = float(max(scores_np))
+    minScore = float(min(scores_np))
+    if not quiet:
+        print(f'After: min,max = {minScore},{maxScore}')
+    # endif
     numScores  = int(len(scores_np))
 
-    quiet = True
-    Xc_cts, Y = acKDE.getPDF(scores_np, 'epanechnikov', 'new', quiet)
-    Y1D = Y[:, 0]
-    y2 = np.interp(scores_np, Xc_cts, Y1D)
-    plt.plot(scores_np, y2)
-    plt.show()
+    #quiet = True
+    #Xc_cts, Y = acKDE.getPDF(scores_np, 'epanechnikov', 'new', quiet)
+    #Y1D = Y[:, 0]
+    #y2 = np.interp(scores_np, Xc_cts, Y1D)
+    #plt.plot(scores_np, y2)
+    #plt.show()
 
     for bins in [3, 6, 9]:
-        if calibrationOK(numScores, bins) == 0:
-            print(f'Not plotted: insufficient scores ({numScores}) for {bins} bins')
+        if calibrationOK(numScores, bins) == 0 and (not quiet):
+                print(f'Not plotted: insufficient scores ({numScores}) for {bins} bins')
         else:
             plotTitle = f'Calibration plot with {bins} bins'
             dataTitle = 'Classifier'
-            if calibrationOK(numScores, bins) == 0.5:
+            if calibrationOK(numScores, bins) == 0.5 and (not quiet):
                 print(f'Plotted despite insufficient scores ({numScores}) for {bins} bins')
             # endif
             params = dict(y_true=newlabels, y_prob=scores_np, normalize=False, strategy='uniform', n_bins=bins)
-            fig, ax = plotCalibrationCurve(plotTitle, dataTitle, params)
+            if showPlot:
+                fig, ax = plotCalibrationCurve(plotTitle, dataTitle, quiet, params)
+            else:
+                prob_predicted, prob_true = dr.computeCalibrationCurve(plotTitle, dataTitle, quiet, params)
+            #endif
+            if showPlot:
+                plt.show()
+                fig.savefig(f'output/calib_{fileNum}-{bins}.png')
+            #endif
         # endif
-        plt.show()
-        fig.savefig(f'output/calib_{fileNum}-{bins}.png')
     # endfor
 #enddef
 
-
 def doAdvancedMeasures(scores, labels, groupAxis, deepROC_groups, testNum):
-    global quiet
+    global quiet, showPlot
     costs = dict(cFP=1, cFN=1, cTP=0, cTN=0, rates=False)
-    results, EQresults = dr.deepROC(costs=costs,     showPlot=True,  showData=False,
+    results, EQresults = dr.deepROC(costs=costs,     showPlot=showPlot,  showData=False,
                                     showError=False, scores=scores,   labels=labels,  posclass=1,
                                     testNum=testNum, pAUCranges=deepROC_groups,   rangeAxis=groupAxis,
                                     useCloseRangePoint=False, sanityCheckWholeAUC=True, quiet=quiet)
@@ -586,7 +603,7 @@ def test_deepROC(testNum=1, costs={}, sanityCheckWholeAUC=True, showPlot=True, s
                      'avgA', 'bAvgA', 'avgSens', 'avgSpec',
                      'avgPPV', 'avgNPV',
                      'avgLRp', 'avgLRn',
-                     'ubAvgA', 'avgBA', 'sPA']
+                     'avgBA', 'sPA']
     num_group_measures = len(groupMeasures)
     num_area_measures = len(areaMeasures)
 
@@ -642,7 +659,7 @@ elif useSingleTestVector == True:
                           useCloseRangePoint=useCloseRangePoint)
 elif useAllTestVectors == True:
     passAllTests = True
-    numAllTests  = 15  # 0-indexed
+    numAllTests  = 20 # 0-indexed
     passTest     = np.zeros((numAllTests,))
     for testNum in range(1, numAllTests+1):
         passTest[int(testNum-1)] = \

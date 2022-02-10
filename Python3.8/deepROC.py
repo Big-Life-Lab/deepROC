@@ -89,9 +89,9 @@ rates               = False                             # treat costs as rates, 
 
 # choose what to show
 sanityCheckWholeAUC = True
-showPlot            = True
+showPlot            = False
 showData            = False
-showError           = True     # areas in ROC plots that represent error
+showError           = False  # areas in ROC plots that represent error
 
 import do_pAUCc            as ac
 import getPDF              as acKDE
@@ -456,11 +456,11 @@ def deepROC(testNum='1',    costs={}, sanityCheckWholeAUC=True,    showPlot=True
     #endif
     # code to check for PASS here
     if sanityCheckWholeAUC:
-        pass1     = ac.areEpsilonEqual(cDelta_sum, c,   'cDelta_sum', 'c',   ep, quiet)
+        pass1     = ac.areEpsilonEqual(cDelta_sum, c,   'C_i_sum', 'C',   ep, quiet)
     #endif
-    pass2     = ac.areEpsilonEqual(cpAUC_sum,  AUC, 'cpAUC_sum',  'AUC', ep, quiet)
-    pass3     = ac.areEpsilonEqual(pAUC_sum ,  AUC, 'pAUC_sum',   'AUC', ep, quiet)
-    pass4     = ac.areEpsilonEqual(pAUCx_sum,  AUC, 'pAUCx_sum',  'AUC', ep, quiet)
+    pass2     = ac.areEpsilonEqual(cpAUC_sum,  AUC,     'AUC_i_sum',  'AUC', ep, quiet)
+    pass3     = ac.areEpsilonEqual(pAUC_sum ,  AUC,     'pAUC_sum',   'AUC', ep, quiet)
+    pass4     = ac.areEpsilonEqual(pAUCx_sum,  AUC,     'pAUCx_sum',  'AUC', ep, quiet)
     if sanityCheckWholeAUC:
         passALLeq = passALLeq and pass1 and pass2 and pass3 and pass4
     else:
