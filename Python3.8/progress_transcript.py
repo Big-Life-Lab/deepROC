@@ -2,6 +2,11 @@
 Progress Transcript - allow stdout to terminal and captured in a file too
                       with the ability to log a progress bar when triggered by 'actions'
 
+# Original version written by Brian Burns:
+# https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
+# Adapted by Amith Koujalgi and Brian Burns
+# Further adapted by André Carrington to allow a progress bar. 
+
 IMPORTANT: In a Jupyter notebook, the text and progress bars for later cells will
            show up after the first cell where progress_transcript is started. The
            transcript can be stopped and started again after a particular cell,
@@ -29,10 +34,6 @@ Usage:
     progress_transcript.stop()
     print('code after logging')
 """
-# Written by André Carrington
-# Adapted from Transcript, written by Amith Koujalgi and Brian Burns
-# The original version is one of the last posts by Brian Burns here:
-# https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
 
 import sys
 
