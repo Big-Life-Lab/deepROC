@@ -1,11 +1,6 @@
 """
 Progress Transcript - allow stdout to terminal and captured in a file too
-                      with the ability to log a progress bar when triggered by 'actions'
-
-# Original version written by Brian Burns:
-# https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
-# Adapted by Amith Koujalgi and Brian Burns
-# Further adapted by André Carrington to allow a progress bar. 
+                      with the ability to log a progress bar when triggered by 'actions' 
 
 IMPORTANT: In a Jupyter notebook, the text and progress bars for later cells will
            show up after the first cell where progress_transcript is started. The
@@ -34,6 +29,12 @@ Usage:
     progress_transcript.stop()
     print('code after logging')
 """
+
+# The original Logger class was written by Amith Koujalgi, 2013. 
+# Transcript is a modified version of Logger, written by Brian Burns, 2017. It was obtained in August 2020 from:
+#    https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
+# Progress_Transcript is a modified version of Transcript, written by André Carrington, 2020.  It allows the 
+#    progress bar in hyperopt to coexist with logging to a file. 
 
 import sys
 
