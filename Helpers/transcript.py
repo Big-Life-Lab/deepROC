@@ -12,7 +12,6 @@ Usage:
 # It was written/modified by Brian Burns, 2017.
 # It was obtained in August 2020 from:
 # https://stackoverflow.com/questions/14906764/how-to-redirect-stdout-to-both-file-and-console-with-scripting
-# It has been modified by André Carrington, 2020 - to write a file, not append to it
 
 import sys
 
@@ -20,7 +19,7 @@ class Transcript(object):
 
     def __init__(self, filename):
         self.terminal = sys.stdout
-        self.logfile = open(filename, "w")
+        self.logfile = open(filename, "a")
 
     def write(self, message):
         self.terminal.write(message)
