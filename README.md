@@ -2,6 +2,9 @@
   
 The second release of Deep ROC Analysis code for Python 3, implements ROC and AUC related measures which are of general interest: the AUC and C statistic for binary outcomes, are generalized from measuring a whole ROC curve, to a part [1][2].  An alternative, called the Partial AUC, is misleading (and a misnomer) because it only measures sensitivity--it does not represent AUC in a part.  The Concordant Partial AUC and Partial C statistic are proper generalizations.  
   
+pip install deeproc  
+See: https://pypi.org/project/deeproc/  
+  
 This code is a complete refactoring of the earlier release, from procedural to object-oriented, and written to simplify use, understanding, extension and management.  
   
 The code consists of four classes: SimpleROC, FullROC, DeepROC and ConcordanceMatrixPlot. Please read "Deep ROC Code Documentation.docx" for further information.  
