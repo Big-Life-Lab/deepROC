@@ -358,10 +358,6 @@ class SimpleROC(object):
         #endif
     #enddef
 
-    def setFoldsNPclassRatio(self, foldsNPclassRatio):
-        self.foldsNPclassRatio = foldsNPclassRatio
-    #enddef
-
     def set_fold(self, fpr=None, tpr=None, threshold=None):
         '''Set ROC data for a fold with fpr and tpr; threshold is optional.'''
         if fpr is None or tpr is None:

@@ -28,21 +28,25 @@ class DeepROC(FullROC):
         super().__init__(predicted_scores=predicted_scores, labels=labels, poslabel=poslabel, quiet=quiet)
 
         #   Deep ROC...
-        self.interpolation   = None
+        self.interpolation     = None
         self.populationPrevalence = None
 
         #   Analysis...
-        self.wholeMeasures   = None
-        self.groupMeasures   = None
-        self.pointMeasures   = None
+        self.wholeMeasures     = None
+        self.groupMeasures     = None
+        self.pointMeasures     = None
         
-        self.groups          = None
-        self.groupAxis       = None
+        self.groups            = None
+        self.groupAxis         = None
         self.groupsArePerfectCoveringSet = None
         
-        self.wholeResults    = None
-        self.groupResults    = None
-        self.pointResults    = None        
+        self.wholeResults      = None
+        self.groupResults      = None
+        self.pointResults      = None
+
+        self.foldsNPclassRatio = None
+        self.NPclassRatio      = None
+        self.priorPoint        = None
     #enddef
 
     def setPopulationPrevalence(self, populationPrevalence=None):
@@ -367,6 +371,18 @@ class DeepROC(FullROC):
                 print(f"\nSome results did not match (failed).")
             # endif
         # endif
+    #enddef
+
+    def setFoldsNPclassRatio(self, foldsNPclassRatio):
+        self.foldsNPclassRatio = foldsNPclassRatio
+    #enddef
+
+    def setNPclassRatio(self, NPclassRatio):
+        self.NPclassRatio = NPclassRatio
+    #enddef
+
+    def setPriorPoint(self, priorPoint):
+        self.priorPoint = priorPoint
     #enddef
 
     # plot() is in the superclass FullROC
