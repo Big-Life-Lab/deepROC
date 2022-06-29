@@ -67,13 +67,17 @@ def interpolateROC(rstat, ostat, thresh, ixL, ixR, interpValue):
     # get widths for interpolation
     width_rstat_RL   = rstat[ixR]   - rstat[ixL]
     width_ostat_RL   = ostat[ixR]   - ostat[ixL]
-    width_thresh_RL  = thresh[ixR]  - thresh[ixL]
+    if thresh is not None:
+        width_thresh_RL  = thresh[ixR]  - thresh[ixL]
     perCentFromL     = (interpValue - rstat[ixL])  / width_rstat_RL
 
     # interpolate
     # new_rstat_value  = interpValue
     new_ostat_value  = ostat[ixL]   + perCentFromL * width_ostat_RL
-    new_thresh_value = thresh[ixL]  + perCentFromL * width_thresh_RL
+    if thresh is not None:
+        new_thresh_value = thresh[ixL]  + perCentFromL * width_thresh_RL
+    else:
+        new_thresh_value = 'NA'
 
     return new_ostat_value, new_thresh_value, perCentFromL
 #enddef

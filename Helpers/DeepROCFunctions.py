@@ -537,10 +537,12 @@ def areEpsilonEqual(a, b, atext, btext, ep, quiet):
 def rocErrorCheck(fpr,tpr,thresh,rangeEndpoints1,rangeAxis,rocRuleLeft,rocRuleRight):
     FPR, TPR, NE, SW = ('FPR', 'TPR', 'NE', 'SW')
     # error checks
-    if len(thresh) != len(fpr) or len(thresh) != len(tpr):
-        print("fpr, tpr and thresholds must have the same length")
-    if len(thresh) < 2:
-        raise ValueError('There must be at least 2 points in fpr, tpr, thresholds')
+    if thresh is not None:
+        if len(thresh) != len(fpr) or len(thresh) != len(tpr):
+            print("fpr, tpr and thresholds must have the same length")
+        if len(thresh) < 2:
+            raise ValueError('There must be at least 2 points in fpr, tpr, thresholds')
+    #endif
     if rangeEndpoints1[0] >= rangeEndpoints1[1] or len(rangeEndpoints1) != 2:
         pass
         # this is not necessarily an error, allow it instead of raising an error

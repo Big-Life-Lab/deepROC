@@ -94,46 +94,6 @@ class DeepROC(FullROC):
         return self.groups
     #enddef
 
-    def getGroupForAUCi(self, groupIndex, forFolds):
-        import numpy as np
-        if self.groups is None:
-            SystemError('Must use setGroupsBy() method first.')
-        #endif
-
-        # get group information for AUC
-        if self.groupAxis == 'TPR' or self.groupAxis == 'FPR':
-            if ( self.groupAxis == 'FPR' and self.groups[groupIndex][0] == 0) or \
-               ( self.groupAxis == 'TPR' and self.groups[groupIndex][1] == 0):
-                rocRuleLeft  = 'SW'
-                rocRuleRight = 'NE'
-            else:
-                rocRuleLeft  = 'NE'
-                rocRuleRight = 'NE'
-            # endif
-
-            quiet2 = True
-            group  = self.groups[groupIndex]
-            if forFolds:
-                fpr        = self.mean_fpr
-                tpr        = self.mean_tpr
-                thresholds = np.ones(self.mean_fpr.shape)
-            else:
-                fpr        = self.full_fpr
-                tpr        = self.full_tpr
-                thresholds = self.full_thresholds
-            #endif
-            partial_fpr, partial_tpr, groupByOtherAxis, groupByThreshold, \
-                matchedIndices, approxIndices \
-                = self.getGroupForAUC(fpr, tpr, thresholds, self.groupAxis, group,
-                                      rocRuleLeft, rocRuleRight, quiet2)
-            return partial_fpr, partial_tpr, groupByOtherAxis, groupByThreshold, \
-                   matchedIndices, approxIndices, group, rocRuleLeft, rocRuleRight
-        else:
-            # to be completed
-            return None, None, None, None, None, \
-                   None, None, None, None
-        #endif
-    #enddef
 
     def analyzeGroup(self, groupIndex, showData=False, forFolds=False, quiet=False):
         from Helpers.DeepROCFunctions import partial_C_statistic_simple
@@ -156,7 +116,7 @@ class DeepROC(FullROC):
         #endif
 
         # get group information for AUC
-        partial_fpr, partial_tpr, groupByOtherAxis, groupByThreshold, \
+        partial_fpr, partial_tpr, _, groupByOtherAxis, groupByThreshold, \
           matchedIndices, approxIndices, rangeEndpoints1, rocRuleLeft, rocRuleRight = \
           self.getGroupForAUCi(groupIndex, forFolds=forFolds)
 
@@ -181,7 +141,7 @@ class DeepROC(FullROC):
         # endif
 
         # get group information for C
-        if forFolds:
+        if forFolds or self.full_newlabels is None:
             # for Mean ROC we cannot compute C measures
 
             # show ROC group boundaries and information
@@ -269,7 +229,7 @@ class DeepROC(FullROC):
             measure_dict.update(temp_dict)
         #endif
 
-        # discrete partial measures next
+        # discrete partial measures next, using AUC ROC info
         if forFolds:
             N = self.foldsNPclassRatio / (1 + self.foldsNPclassRatio)
             P = 1 - N
@@ -300,8 +260,8 @@ class DeepROC(FullROC):
             # endif
         # endif
 
-        if not forFolds:
-            # check for expected equalities
+        # check for expected equalities
+        if not forFolds and self.full_newlabels is not None:
             ep    = 1 * (10 ** -12)
             pass1 = areEpsilonEqual(C_i,  AUC_i,   'C_i',  'AUC_i', ep, quiet)
             pass2 = areEpsilonEqual(Cn_i, AUCn_i, 'Cn_i', 'AUCn_i', ep, quiet)
@@ -331,7 +291,7 @@ class DeepROC(FullROC):
         #endif
     #enddef
 
-    def analyze(self):
+    def analyze(self, forFolds=False):
         from Helpers.DeepROCFunctions import areEpsilonEqual
 
         measure_dict = []
@@ -342,12 +302,14 @@ class DeepROC(FullROC):
         numgroups = len(self.groups)
         for i in range(0, numgroups):
             print(f'\nGroup {i + 1}:')
-            iterationPassed, iteration_dict = self.analyzeGroup(i, showData=True, forFolds=False, quiet=False)
+            iterationPassed, iteration_dict = self.analyzeGroup(i, showData=True, forFolds=forFolds, quiet=False)
             measure_dict = measure_dict + [iteration_dict]
             # add up parts as you go
             if self.groupsArePerfectCoveringSet:
                 allIterationsPassed = allIterationsPassed and iterationPassed
-                Ci_sum              = Ci_sum     + measure_dict[i]['C_i']
+                if not forFolds and self.full_newlabels is not None:
+                    Ci_sum              = Ci_sum     + measure_dict[i]['C_i']
+                #endif
                 AUCi_sum            = AUCi_sum   + measure_dict[i]['AUC_i']
                 pAUC_sum            = pAUC_sum   + measure_dict[i]['pAUC']
                 pAUCx_sum           = pAUCx_sum  + measure_dict[i]['pAUCx']
@@ -359,12 +321,18 @@ class DeepROC(FullROC):
             ep = 1 * (10 ** -12)
             quietFalse = False
             print(' ')
-            pass1 = areEpsilonEqual(Ci_sum,    self.C,   'C_i_sum',   'C',   ep, quietFalse)
+            if not forFolds and self.full_newlabels is not None:
+                pass1 = areEpsilonEqual(Ci_sum,    self.C,   'C_i_sum',   'C',   ep, quietFalse)
+            #endif
             pass2 = areEpsilonEqual(AUCi_sum,  self.AUC, 'AUC_i_sum', 'AUC', ep, quietFalse)
             pass3 = areEpsilonEqual(pAUC_sum,  self.AUC, 'pAUC_sum',  'AUC', ep, quietFalse)
             pass4 = areEpsilonEqual(pAUCx_sum, self.AUC, 'pAUCx_sum', 'AUC', ep, quietFalse)
 
-            allPassed = allIterationsPassed and pass1 and pass2 and pass3 and pass4
+            if not forFolds and self.full_newlabels is not None:
+                allPassed = allIterationsPassed and pass1 and pass2 and pass3 and pass4
+            else:
+                allPassed = allIterationsPassed and pass2 and pass3 and pass4
+            #endif
             if allPassed:
                 print(f"\nAll results passed.")
             else:
@@ -463,7 +431,7 @@ class DeepROC(FullROC):
                 thresholds = self.full_thresholds
             #endif
 
-            partial_fpr, partial_tpr, groupByOtherAxis, groupByThreshold, matchedIndices, approxIndices \
+            partial_fpr, partial_tpr, _, groupByOtherAxis, groupByThreshold, matchedIndices, approxIndices \
                 = self.getGroupForAUC(fpr, tpr, thresholds, self.groupAxis, self.groups[groupIndex],
                                       rocRuleLeft, rocRuleRight, quiet)
 
@@ -579,8 +547,9 @@ class DeepROC(FullROC):
         # error checks
         rocErrorCheck(ffpr, ftpr, fthresh, rangeEndpoints1, rangeAxis1, rocRuleLeft, rocRuleRight)
 
-        pfpr_np = np.array(ffpr)
-        ptpr_np = np.array(ftpr)
+        pfpr_np    = np.array(ffpr)
+        ptpr_np    = np.array(ftpr)
+        pthresh_np = np.array(fthresh)
         n = len(ffpr)
 
         if rangeAxis1 == FPR:
@@ -620,27 +589,35 @@ class DeepROC(FullROC):
                 #   with a newly interpolated point at rangeEndpoints0
                 if rangeAxis1 == FPR:
                     if i == 1:  # right/top
-                        pfpr_np = np.delete(pfpr_np, np.arange(ixR, n))
-                        ptpr_np = np.delete(ptpr_np, np.arange(ixR, n))
-                        pfpr_np = np.append(pfpr_np, endpoint)
-                        ptpr_np = np.append(ptpr_np, rangeEndpoints2[i])
+                        pfpr_np    = np.delete(pfpr_np,    np.arange(ixR, n))
+                        ptpr_np    = np.delete(ptpr_np,    np.arange(ixR, n))
+                        pthresh_np = np.delete(pthresh_np, np.arange(ixR, n))
+                        pfpr_np    = np.append(pfpr_np,    endpoint)
+                        ptpr_np    = np.append(ptpr_np,    rangeEndpoints2[i])
+                        pthresh_np = np.append(pthresh_np, pthresh_np[-1])
                     elif i == 0:  # left/bottom
-                        pfpr_np = np.delete(pfpr_np, np.arange(0, ixL))
-                        ptpr_np = np.delete(ptpr_np, np.arange(0, ixL))
-                        pfpr_np = np.insert(pfpr_np, 0, endpoint)
-                        ptpr_np = np.insert(ptpr_np, 0, rangeEndpoints2[i])
+                        pfpr_np    = np.delete(pfpr_np,    np.arange(0, ixL+1))
+                        ptpr_np    = np.delete(ptpr_np,    np.arange(0, ixL+1))
+                        pthresh_np = np.delete(pthresh_np, np.arange(0, ixL+1))
+                        pfpr_np    = np.insert(pfpr_np,    0, endpoint)
+                        ptpr_np    = np.insert(ptpr_np,    0, rangeEndpoints2[i])
+                        pthresh_np = np.insert(pthresh_np, 0, pthresh_np[0])
                     # endif
                 else:  # rangeAxis1 == TPR:
                     if i == 1:  # right/top
-                        pfpr_np = np.delete(pfpr_np, np.arange(ixR, n))
-                        ptpr_np = np.delete(ptpr_np, np.arange(ixR, n))
-                        pfpr_np = np.append(pfpr_np, rangeEndpoints2[i])
-                        ptpr_np = np.append(ptpr_np, endpoint)
+                        pfpr_np    = np.delete(pfpr_np,    np.arange(ixR, n))
+                        ptpr_np    = np.delete(ptpr_np,    np.arange(ixR, n))
+                        pthresh_np = np.delete(pthresh_np, np.arange(ixR, n))
+                        pfpr_np    = np.append(pfpr_np,    rangeEndpoints2[i])
+                        ptpr_np    = np.append(ptpr_np,    endpoint)
+                        pthresh_np = np.append(pthresh_np, pthresh_np[-1])
                     elif i == 0:  # left/bottom
-                        pfpr_np = np.delete(pfpr_np, np.arange(0, ixL))
-                        ptpr_np = np.delete(ptpr_np, np.arange(0, ixL))
-                        pfpr_np = np.insert(pfpr_np, 0, rangeEndpoints2[i])
-                        ptpr_np = np.insert(ptpr_np, 0, endpoint)
+                        pfpr_np    = np.delete(pfpr_np,    np.arange(0, ixL+1))
+                        ptpr_np    = np.delete(ptpr_np,    np.arange(0, ixL+1))
+                        pthresh_np = np.delete(pthresh_np, np.arange(0, ixL+1))
+                        pfpr_np    = np.insert(pfpr_np,    0, rangeEndpoints2[i])
+                        ptpr_np    = np.insert(ptpr_np,    0, endpoint)
+                        pthresh_np = np.insert(pthresh_np, 0, pthresh_np[0])
                     # endif
                 # endif
             else:  # found one or more indices in ix that match endpoint
@@ -652,25 +629,79 @@ class DeepROC(FullROC):
                     ix_to_use = ix[-1]
                 # endif
                 rangeIndices0[i] = ix_to_use
-                rangeEndpoints0[i] = fthresh[ix_to_use]
+                if fthresh is not None:
+                    rangeEndpoints0[i] = fthresh[ix_to_use]
+                else:
+                    rangeEndpoints0[i] = 'NA'
                 rangeEndpoints2[i] = ostat[ix_to_use]
                 if i == 1:  # right/top
                     if ix_to_use < n - 1:  # if not last  instance then truncate right part
                         pfpr_np = np.delete(pfpr_np, np.arange(ix_to_use + 1, n))
                         ptpr_np = np.delete(ptpr_np, np.arange(ix_to_use + 1, n))
+                        pthresh_np = np.delete(pthresh_np, np.arange(ix_to_use + 1, n))
                     # endif
                 elif i == 0:  # left/bottom
                     if ix_to_use > 0:  # if not first instance then truncate left part
                         pfpr_np = np.delete(pfpr_np, np.arange(0, ix_to_use))
                         ptpr_np = np.delete(ptpr_np, np.arange(0, ix_to_use))
+                        pthresh_np = np.delete(pthresh_np, np.arange(0, ix_to_use))
                     # endif
                 # endif
             # endif
         # endfor
         pfpr = pfpr_np.tolist()
         ptpr = ptpr_np.tolist()
-        return pfpr, ptpr, rangeEndpoints2, rangeEndpoints0, rangeIndices0, approxIndices0
+        pthresh = pthresh_np.tolist()
+        # return pfpr, ptpr, rangeEndpoints2, rangeEndpoints0, rangeIndices0, approxIndices0
+        return pfpr, ptpr, pthresh, rangeEndpoints2, rangeEndpoints0, rangeIndices0, approxIndices0
     # enddef
+
+    def getGroupForAUCi(self, groupIndex, forFolds):
+        import numpy as np
+        if self.groups is None:
+            SystemError('Must use setGroupsBy() method first.')
+        #endif
+
+        # get group information for AUC
+        if self.groupAxis == 'TPR' or self.groupAxis == 'FPR':
+            if ( self.groupAxis == 'FPR' and self.groups[groupIndex][0] == 0) or \
+                    ( self.groupAxis == 'TPR' and self.groups[groupIndex][1] == 0):
+                rocRuleLeft  = 'SW'
+                rocRuleRight = 'NE'
+            else:
+                rocRuleLeft  = 'NE'
+                rocRuleRight = 'NE'
+            # endif
+
+            quiet2 = True
+            group  = self.groups[groupIndex]
+            if forFolds:
+                fpr        = self.mean_fpr
+                tpr        = self.mean_tpr
+                thresholds = np.ones(self.mean_fpr.shape)
+            else:
+                fpr        = self.full_fpr
+                tpr        = self.full_tpr
+                thresholds = self.full_thresholds
+            #endif
+            # partial_fpr, partial_tpr, groupByOtherAxis, groupByThreshold, \
+            # matchedIndices, approxIndices \
+            partial_fpr, partial_tpr, partial_thresh, groupByOtherAxis, groupByThreshold, \
+            matchedIndices, approxIndices \
+                = self.getGroupForAUC(fpr, tpr, thresholds, self.groupAxis, group,
+                                      rocRuleLeft, rocRuleRight, quiet2)
+            # return partial_fpr, partial_tpr, groupByOtherAxis, groupByThreshold, \
+            #        matchedIndices, approxIndices, group, rocRuleLeft, rocRuleRight
+            return partial_fpr, partial_tpr, partial_thresh, groupByOtherAxis, groupByThreshold, \
+                   matchedIndices, approxIndices, group, rocRuleLeft, rocRuleRight
+        else:
+            # to be completed
+            # return None, None, None, None, None, \
+            #        None, None, None, None
+            return None, None, None, None, None, None, \
+                   None, None, None, None
+        #endif
+    #enddef
 
     def getGroupForC(self, ffpr, ftpr, fthresh, fSlopeFactor, scores, labels, posclass, xrange, yrange):
         '''
