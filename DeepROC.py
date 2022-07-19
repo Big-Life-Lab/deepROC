@@ -324,10 +324,15 @@ class DeepROC(FullROC):
             if not forFolds and self.full_newlabels is not None:
                 pass1 = areEpsilonEqual(Ci_sum,    self.C,   'C_i_sum',   'C',   ep, quietFalse)
             #endif
-            pass2 = areEpsilonEqual(AUCi_sum,  self.AUC, 'AUC_i_sum', 'AUC', ep, quietFalse)
-            pass3 = areEpsilonEqual(pAUC_sum,  self.AUC, 'pAUC_sum',  'AUC', ep, quietFalse)
-            pass4 = areEpsilonEqual(pAUCx_sum, self.AUC, 'pAUCx_sum', 'AUC', ep, quietFalse)
-
+            if forFolds:
+                pass2 = areEpsilonEqual(AUCi_sum,  self.AUCofMeanROC, 'AUC_i_sum', 'AUC', ep, quietFalse)
+                pass3 = areEpsilonEqual(pAUC_sum,  self.AUCofMeanROC, 'pAUC_sum',  'AUC', ep, quietFalse)
+                pass4 = areEpsilonEqual(pAUCx_sum, self.AUCofMeanROC, 'pAUCx_sum', 'AUC', ep, quietFalse)
+            else:
+                pass2 = areEpsilonEqual(AUCi_sum,  self.AUC, 'AUC_i_sum', 'AUC', ep, quietFalse)
+                pass3 = areEpsilonEqual(pAUC_sum,  self.AUC, 'pAUC_sum',  'AUC', ep, quietFalse)
+                pass4 = areEpsilonEqual(pAUCx_sum, self.AUC, 'pAUCx_sum', 'AUC', ep, quietFalse)
+            #endif
             if not forFolds and self.full_newlabels is not None:
                 allPassed = allIterationsPassed and pass1 and pass2 and pass3 and pass4
             else:
