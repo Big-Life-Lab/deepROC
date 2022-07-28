@@ -46,7 +46,6 @@ class DeepROC(FullROC):
 
         self.foldsNPclassRatio = None
         self.NPclassRatio      = None
-        self.priorPoint        = None
     #enddef
 
     def setPopulationPrevalence(self, populationPrevalence=None):
@@ -352,10 +351,6 @@ class DeepROC(FullROC):
 
     def setNPclassRatio(self, NPclassRatio):
         self.NPclassRatio = NPclassRatio
-    #enddef
-
-    def setPriorPoint(self, priorPoint):
-        self.priorPoint = priorPoint
     #enddef
 
     # plot() is in the superclass FullROC

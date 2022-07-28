@@ -99,6 +99,13 @@ def get_ROC_Curve_Label_Offset_Fontsize(x, y, t, maxThresh, fancyLabel):
     if 'fancyLabel' not in locals():
         fancyLabel = False
 
+    if 't' not in locals():
+        t         = 0
+
+    if 'maxThresh' not in locals():
+        t         = 0
+        maxThresh = 2
+
     inf_symbol = '\u221e'
     fontsize   = 'x-small'
     # fontsize: float or {'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'}
@@ -176,6 +183,20 @@ def plotOptimalPointWithThreshold(fpr_opt, tpr_opt, thresh_opt, maxThresh, fancy
         if fancyLabel:
             plt.annotate(label, (fpr, tpr), textcoords="offset points",
                          color='r', xytext=offset, ha='left', fontsize=fontsize)
+    #endfor
+    return
+#enddef
+
+def plotOptimalPoint(fpr_opt, tpr_opt):
+    import matplotlib.pyplot as plt
+
+    # plot optimal ROC points
+    plt.scatter(fpr_opt, tpr_opt, s=40, marker='o', alpha=1, facecolors='w', lw=2, edgecolors='r')
+    for fpr, tpr in zip(fpr_opt, tpr_opt):
+        label, offset, fontsize = get_ROC_Curve_Label_Offset_Fontsize(fpr, tpr)
+        label = f'({fpr:0.2f},{tpr:0.2f})'
+        plt.annotate(label, (fpr, tpr), textcoords="offset points",
+                     color='r', xytext=offset, ha='left', fontsize=fontsize)
     #endfor
     return
 #enddef

@@ -156,7 +156,10 @@ class SimpleROC(object):
 
         newposlabel = self.newposlabel  # [sic] there is no full version for this
 
-        fig, ax     = plotROC(fpr, tpr, plotTitle, numShowThresh, thresholds, labelThresh)
+        if showThresholds:
+            fig, ax     = plotROC(fpr, tpr, plotTitle, numShowThresh, thresholds, labelThresh)
+        else:
+            fig, ax     = plotROC(fpr, tpr, plotTitle)
 
         if showOptimalROCpoints:
             # get optimal points here...
@@ -192,7 +195,8 @@ class SimpleROC(object):
         return fig, ax
     #enddef
 
-    def plot_folds(self, plotTitle, saveFileName=None, showPlot=True):
+    def plot_folds(self, plotTitle, showOptimalROCpoints=True, costs=None,
+                   saveFileName=None, showPlot=True):
         from Helpers.ROCPlot import plotSimpleROC
         import matplotlib.pyplot as plt
         import numpy as np
