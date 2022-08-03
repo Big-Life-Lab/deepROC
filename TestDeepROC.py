@@ -43,6 +43,7 @@ def testDeepROC(descr, scores, labels, groupAxis='FPR', groups=[[0.0, 1/3], [1/3
     from SimpleROC                    import SimpleROC
     from DeepROC                      import DeepROC
     from ConcordanceMatrixPlot        import ConcordanceMatrixPlot
+    import matplotlib.pyplot as plt
 
     poslabel      = 1
     numShowThresh = 20
@@ -106,15 +107,31 @@ def testDeepROC(descr, scores, labels, groupAxis='FPR', groups=[[0.0, 1/3], [1/3
     print(' ]')
     aDeepROC.setGroupsBy(groupAxis=groupAxis, groups=groups, groupByClosestInstance=False)
 
+    print('aDeepROC.analyzeGroup:')
+    measure_dict = aDeepROC.analyze(forFolds=False)
+    # aDeepROC.analyze(forFolds=False, verbose=True)
+
     if showPlot:
         print('aDeepROC.plotGroup:')
         aCMplot2 = ConcordanceMatrixPlot(aDeepROC)
         for i in range(0, numgroups):
             print(f'ROC plot shown for group {i} [{groups[i][0]:0.2f}, {groups[i][1]:0.2f}]')
-            aDeepROC.plotGroup(plotTitle=f'Deep ROC Plot for group {i+1}, Test {descr}', groupIndex=i,
-                               showError=True, showThresholds=True, showOptimalROCpoints=True, costs=costs,
-                               saveFileName=None, numShowThresh=numShowThresh, showPlot=True, labelThresh=True,
-                               full_fpr_tpr=True)
+            fig, ax = aDeepROC.plotGroup(plotTitle=f'Deep ROC Plot for group {i+1}, Test {descr}',
+                                         groupIndex=i, showError=True, showThresholds=True,
+                                         showOptimalROCpoints=True, costs=costs, saveFileName=None,
+                                         numShowThresh=numShowThresh, showPlot=False, labelThresh=True,
+                                         full_fpr_tpr=True)
+            if aDeepROC.groupAxis == 'FPR':
+                # whichMeasures = ['AUCn_i', 'avgSens', 'avgSpec', 'avgPPV', 'avgNPV']
+                whichMeasures = ['AUCn_i', 'avgSens', 'avgSpec']
+                if False:
+                # if measure_dict[i]['avgSens'] > 0.5:
+                    aDeepROC.annotateGroup(i, measure_dict, whichMeasures, top=False)
+                else:
+                    aDeepROC.annotateGroup(i, measure_dict, whichMeasures, top=True)
+                #endif
+            #endif
+            plt.show()
             # the following code commented out has bugs...
             # print(f'ConcordanceMatrixPlot shown for group {i} [{groups[i][0]:0.2f}, {groups[i][1]:0.2f}]')
             # aCMplot2.plotGroup(plotTitle=f'Concordance Matrix Plot for group {i+1}, Test {descr}',
@@ -122,9 +139,6 @@ def testDeepROC(descr, scores, labels, groupAxis='FPR', groups=[[0.0, 1/3], [1/3
             #                    saveFileName=None, numShowThresholds=numShowThresh, showPlot=showPlot,
             #                    labelThresh=True)
     #endfor
-
-    print('aDeepROC.analyzeGroup:')
-    aDeepROC.analyze()
 #enddef
 
 def myLoadFile(resultNumString):

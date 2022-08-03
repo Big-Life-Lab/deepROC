@@ -61,7 +61,7 @@ def concordant_partial_AUC(pfpr, ptpr, quiet):
 
     if delx == 0:
         if not quiet:
-            print("Warning: For pAUC and pAUCc the width (delx) of the vertical column is zero.")
+            print("Note: For pAUC and AUCi the width (delx) of the vertical column is zero.")
         #endif
         # for a region with no width or area...
         pAUC  = 0  # contribution to AUC from pAUC is zero
@@ -76,7 +76,7 @@ def concordant_partial_AUC(pfpr, ptpr, quiet):
 
     if dely == 0:
         if not quiet:
-            print("Warning: For pAUCx and pAUCc the height (dely) of the horizontal stripe is zero.")
+            print("Note: For pAUCx and AUCi the height (dely) of the horizontal stripe is zero.")
         #endif
         # for a region with no width or area...
         pAUCx  = 0  # contribution to AUC from pAUCx is zero
@@ -560,7 +560,8 @@ def rocErrorCheck(fpr,tpr,thresh,rangeEndpoints1,rangeAxis,rocRuleLeft,rocRuleRi
 #enddef
 
 def showCmeasures(i, C_i, C_area_x, C_area_y, Cn_i, Cn_avgSpec, Cn_avgSens,
-                  Ux_count, Uy_count, whole_area, vertical_stripe_area, horizontal_stripe_area):
+                  Ux_count, Uy_count, whole_area, vertical_stripe_area,
+                  horizontal_stripe_area, verbose=False):
     delx = vertical_stripe_area
     dely = horizontal_stripe_area
 
@@ -575,13 +576,15 @@ def showCmeasures(i, C_i, C_area_x, C_area_y, Cn_i, Cn_avgSpec, Cn_avgSens,
     #print(f"Cny_{i}{' (~pAUCn) ':11s} = {Cn_avgSens:0.4f} = Uy_{i}/del_count_x = {Uy_count:0.2f}/{vertical_stripe_area:0.2f}")
     #print(f"Cnx_{i}{' (~pAUCxn)':11s} = {Cn_avgSpec:0.4f} = Ux_{i}/del_count_y = {Ux_count:0.2f}/{horizontal_stripe_area:0.2f}")
 
-    print(f"C_{i}{'   (~AUC_i) ':13s} = {C_i:0.4f} (Partial C statistic)")
-    print(f"Cy_{i}{'  (~pAUC)  ':12s} = {C_area_y:0.4f} = {Uy_count:0.2f}/{whole_area:0.2f}")
-    print(f"Cx_{i}{'  (~pAUCx) ':12s} = {C_area_x:0.4f} = {Ux_count:0.2f}/{whole_area:0.2f}")
-    print('')
-    print(f"Cn_{i}{'  (~AUCn_i)':12s} = {Cn_i:0.4f} (Normalized partial C statistic)")
-    print(f"Cny_{i}{' (~pAUCn) ':11s} = {Cn_avgSens:0.4f} = {Uy_count:0.2f}/{vertical_stripe_area:0.2f}")
-    print(f"Cnx_{i}{' (~pAUCxn)':11s} = {Cn_avgSpec:0.4f} = {Ux_count:0.2f}/{horizontal_stripe_area:0.2f}")
+    print(f"C_{i}{' ':13s} = {C_i:0.4f}  (Partial C statistic)")
+    if verbose:
+        print(f"Cy_{i}{' ':12s} = {C_area_y:0.4f} = {Uy_count:0.2f}/{whole_area:0.2f}")
+        print(f"Cx_{i}{' ':12s} = {C_area_x:0.4f} = {Ux_count:0.2f}/{whole_area:0.2f}")
+        print('')
+    print(f"Cn_{i}{' ':12s} = {Cn_i:0.4f}  (Normalized partial C statistic)")
+    if verbose:
+        print(f"Cny_{i}{' ':11s} = {Cn_avgSens:0.4f} = {Uy_count:0.2f}/{vertical_stripe_area:0.2f}")
+        print(f"Cnx_{i}{' ':11s} = {Cn_avgSpec:0.4f} = {Ux_count:0.2f}/{horizontal_stripe_area:0.2f}")
     print(' ')
     return
 #enddef
@@ -596,15 +599,16 @@ def showWholeAUCmeasures(AUC, AUC_full, AUC_macro, AUC_micro, AUPRC):
     return
 # enddef
 
-def showAUCmeasures(i, AUC_i, pAUC, pAUCx, AUCn_i, pAUCn, pAUCxn):
-    print(f"AUC_{i}{' ':11s} = {AUC_i:0.4f} (Concordant Partial AUC)")
-    print(f"pAUC_{i}{' ':10s} = {pAUC:0.4f}")
-    print(f"pAUCx_{i}{' ':9s} = {pAUCx:0.4f}")
+def showAUCmeasures(i, AUC_i, pAUC, pAUCx, AUCn_i, pAUCn, pAUCxn, verbose=False):
+    print(f"AUC_{i}{' ':11s} = {AUC_i:0.4f}  (Concordant Partial AUC)")
+    if verbose:
+        print(f"pAUC_{i}{' ':10s} = {pAUC:0.4f}")
+        print(f"pAUCx_{i}{' ':9s} = {pAUCx:0.4f}")
+        print(' ')
+    print(f"AUCn_{i}{' ':10s} = {AUCn_i:0.4f}  (Normalized concordant partial AUC)")
     print(' ')
-    print(f"AUCn_{i}{' ':10s} = {AUCn_i:0.4f} (Normalized concordant partial AUC)")
-    print(f"pAUCn_{i}{' ':9s} = {pAUCn:0.4f}")
-    print(f"pAUCxn_{i}{' ':8s} = {pAUCxn:0.4f}")
-    print(' ')
+    print(f"pAUCn_{i}{' ':9s} = {pAUCn:0.4f}  (Average sensitivity)")
+    print(f"pAUCxn_{i}{' ':8s} = {pAUCxn:0.4f}  (Average specificity)")
     return
 #enddef
 
@@ -642,25 +646,27 @@ def sortScoresAndLabels4(scores, newlabels, labels, slopeFactors):
     return scores, newlabels, labels, slopeFactors
 #enddef
 
-def showDiscretePartialAUCmeasures(measure_dict, showAllMeasures):
-    print(f"{'bAvgA':16s} = {measure_dict['bAvgA']:0.4f}")
-    print(f"{'avgSens':16s} = {measure_dict['avgSens']:0.4f}")
-    print(f"{'avgSpec':16s} = {measure_dict['avgSpec']:0.4f}")
+def showDiscretePartialAUCmeasures(i, measure_dict, showAllMeasures, verbose=False):
+    if verbose:
+        print(f"bAvgA_{i}{' ':9s} = {measure_dict['bAvgA']:0.4f}  computed with discrete method")
+    print(f"avgSens_{i}{' ':7s} = {measure_dict['avgSens']:0.4f}  computed with discrete method")
+    print(f"avgSpec_{i}{' ':7s} = {measure_dict['avgSpec']:0.4f}  computed with discrete method")
     print(' ')
-    print(f"{'avgPPV':16s} = {measure_dict['avgPPV']:0.4f}")
-    print(f"{'avgNPV':16s} = {measure_dict['avgNPV']:0.4f}")
-    print(f"{'avgLRp':16s} = {measure_dict['avgLRp']:0.4f}")
-    print(f"{'avgLRn':16s} = {measure_dict['avgLRn']:0.4f}")
+    print(f"avgPPV_{i}{' ':8s} = {measure_dict['avgPPV']:0.4f}  computed with discrete method")
+    print(f"avgNPV_{i}{' ':8s} = {measure_dict['avgNPV']:0.4f}  computed with discrete method")
+    if verbose:
+        print(f"avgLRp_{i}{' ':8s} = {measure_dict['avgLRp']:0.4f}  computed with discrete method")
+        print(f"avgLRn_{i}{' ':8s} = {measure_dict['avgLRn']:0.4f}  computed with discrete method")
     print(' ')
 
-    if showAllMeasures:
-        print(f"{'avgA':16s} = {measure_dict['avgA']:0.4f}")
-        print(f"{'avgBA':16s} = {measure_dict['avgBA']:0.4f}")
+    if showAllMeasures and verbose:
+        print(f"avgA_{i}{' ':10s} = {measure_dict['avgA']:0.4f}  computed with discrete method")
+        print(f"avgBA_{i}{' ':9s} = {measure_dict['avgBA']:0.4f}  computed with discrete method")
         print(' ')
     # endif
 #enddef
 
-def showROCinfo(xgroup, ygroup, tgroup, rocRuleLeft, rocRuleRight):
+def showROCinfo(xgroup, ygroup, tgroup, rocRuleLeft, rocRuleRight, verbose=False):
     import numpy as np
 
     print(f"{'FPR':16s} = [{xgroup[0]:0.3f} {xgroup[1]:0.3f}]")
@@ -671,18 +677,21 @@ def showROCinfo(xgroup, ygroup, tgroup, rocRuleLeft, rocRuleRight):
     else:
         print(f"{'Thresholds':16s} = [{tgroup[0]:0.3f} {tgroup[1]:0.3f}]")
     # endif
+    print('')
 
-    print(f"{' ':33s} {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}      {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}")
-    if np.isinf(tgroup[0]):
-        print(f"{'rocLeftRight':<16s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
-              f"({xgroup[0]:0.4f},{ygroup[0]:0.4f},{'inf':<6s}) to "
-              f"({xgroup[1]:0.4f},{ygroup[1]:0.4f},{tgroup[1]:0.4f})")
-    else:
-        print(f"{'rocLeftRight':<16s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
-              f"({xgroup[0]:0.4f},{ygroup[0]:0.4f},{tgroup[0]:0.4f}) to "
-              f"({xgroup[1]:0.4f},{ygroup[1]:0.4f},{tgroup[1]:0.4f})")
-    # endif
-    print(' ')
+    if verbose:
+        print(f"{' ':33s} {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}      {'fpr':<6s} {'tpr':<6s} {'thresh':<6s}")
+        if np.isinf(tgroup[0]):
+            print(f"{'rocLeftRight':<16s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
+                  f"({xgroup[0]:0.4f},{ygroup[0]:0.4f},{'inf':<6s}) to "
+                  f"({xgroup[1]:0.4f},{ygroup[1]:0.4f},{tgroup[1]:0.4f})")
+        else:
+            print(f"{'rocLeftRight':<16s} = [{rocRuleLeft:<4s} {rocRuleRight:<4s}]   "
+                  f"({xgroup[0]:0.4f},{ygroup[0]:0.4f},{tgroup[0]:0.4f}) to "
+                  f"({xgroup[1]:0.4f},{ygroup[1]:0.4f},{tgroup[1]:0.4f})")
+        #endif
+        print(' ')
+    #endif
     return
 #enddef
 

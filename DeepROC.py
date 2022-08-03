@@ -94,7 +94,7 @@ class DeepROC(FullROC):
     #enddef
 
 
-    def analyzeGroup(self, groupIndex, showData=False, forFolds=False, quiet=False):
+    def analyzeGroup(self, groupIndex, showData=False, forFolds=False, quiet=False, verbose=False):
         from Helpers.DeepROCFunctions import partial_C_statistic_simple
         from Helpers.DeepROCFunctions import partial_C_statistic
         from Helpers.DeepROCFunctions import concordant_partial_AUC
@@ -157,10 +157,10 @@ class DeepROC(FullROC):
                                     self.newposlabel, xgroup, ygroup)
             # show ROC group boundaries and information
             if not quiet:
-                showROCinfo(xgroup, ygroup, tgroup, rocRuleLeft, rocRuleRight)
+                showROCinfo(xgroup, ygroup, tgroup, rocRuleLeft, rocRuleRight, verbose)
             #endif
             # show Concordance Matrix group boundaries
-            if not quiet:
+            if not quiet and verbose:
                 showConcordanceMatrixInfo(posIndexC, negIndexC, posScores, negScores,
                                           posWeights, negWeights, rocRuleLeft, rocRuleRight)
             #endif
@@ -192,7 +192,8 @@ class DeepROC(FullROC):
             #endif
             if not quiet:
                 showCmeasures(groupIndex+1, C_i, C_area_x, C_area_y, Cn_i, Cn_avgSpec, Cn_avgSens,
-                              Ux_count, Uy_count, whole_area, vertical_stripe_area, horizontal_stripe_area)
+                              Ux_count, Uy_count, whole_area, vertical_stripe_area,
+                              horizontal_stripe_area, verbose=verbose)
             #endif
         #endif
 
@@ -202,7 +203,7 @@ class DeepROC(FullROC):
         AUC_i, pAUC, pAUCx, AUCn_i, pAUCn, pAUCxn = \
             [measure_dict[key] for key in ['AUC_i', 'pAUC', 'pAUCx', 'AUCn_i', 'pAUCn', 'pAUCxn']]
         if not quiet:
-            showAUCmeasures(groupIndex+1, AUC_i, pAUC, pAUCx, AUCn_i, pAUCn, pAUCxn)
+            showAUCmeasures(groupIndex+1, AUC_i, pAUC, pAUCx, AUCn_i, pAUCn, pAUCxn, verbose=verbose)
         #endif
 
         # for a group spanning the whole ROC plot, show whole measures
@@ -247,19 +248,20 @@ class DeepROC(FullROC):
         measure_dict.update(temp_dict)
         if not quiet:
             showAllMeasures = True
-            showDiscretePartialAUCmeasures(measure_dict, showAllMeasures)
+            showDiscretePartialAUCmeasures(groupIndex+1, measure_dict, showAllMeasures, verbose=verbose)
         #endif
 
         # show PAI result only if the group ends at FPR == 0
         if self.groupAxis == 'FPR' and self.groups[groupIndex][0] == 1:
             PAI = partial_area_index_proxy(partial_fpr, partial_fpr, quiet)
             measure_dict.update(dict(PAI=PAI))
-            if not quiet:
+            if not quiet and verbose:
                 print(f"{'PAI':16s} = {PAI:0.4f}  only applies to full or last range")
             # endif
         # endif
 
         # check for expected equalities
+        quiet = not verbose
         if not forFolds and self.full_newlabels is not None:
             ep    = 1 * (10 ** -12)
             pass1 = areEpsilonEqual(C_i,  AUC_i,   'C_i',  'AUC_i', ep, quiet)
@@ -290,7 +292,7 @@ class DeepROC(FullROC):
         #endif
     #enddef
 
-    def analyze(self, forFolds=False):
+    def analyze(self, forFolds=False, verbose=False):
         from Helpers.DeepROCFunctions import areEpsilonEqual
 
         measure_dict = []
@@ -301,7 +303,8 @@ class DeepROC(FullROC):
         numgroups = len(self.groups)
         for i in range(0, numgroups):
             print(f'\nGroup {i + 1}:')
-            iterationPassed, iteration_dict = self.analyzeGroup(i, showData=True, forFolds=forFolds, quiet=False)
+            iterationPassed, iteration_dict = self.analyzeGroup(i, showData=True, forFolds=forFolds, quiet=False,
+                                                                verbose=verbose)
             measure_dict = measure_dict + [iteration_dict]
             # add up parts as you go
             if self.groupsArePerfectCoveringSet:
@@ -318,31 +321,70 @@ class DeepROC(FullROC):
         # code to check for PASS here
         if self.groupsArePerfectCoveringSet:
             ep = 1 * (10 ** -12)
-            quietFalse = False
-            print(' ')
+            if verbose:
+                quiet = False
+                print(' ')
+            else:
+                quiet = True
             if not forFolds and self.full_newlabels is not None:
-                pass1 = areEpsilonEqual(Ci_sum,    self.C,   'C_i_sum',   'C',   ep, quietFalse)
+                pass1 = areEpsilonEqual(Ci_sum,    self.C,   'C_i_sum',   'C',   ep, quiet)
             #endif
             if forFolds:
-                pass2 = areEpsilonEqual(AUCi_sum,  self.AUCofMeanROC, 'AUC_i_sum', 'AUC', ep, quietFalse)
-                pass3 = areEpsilonEqual(pAUC_sum,  self.AUCofMeanROC, 'pAUC_sum',  'AUC', ep, quietFalse)
-                pass4 = areEpsilonEqual(pAUCx_sum, self.AUCofMeanROC, 'pAUCx_sum', 'AUC', ep, quietFalse)
+                pass2 = areEpsilonEqual(AUCi_sum,  self.AUCofMeanROC, 'AUC_i_sum', 'AUC', ep, quiet)
+                pass3 = areEpsilonEqual(pAUC_sum,  self.AUCofMeanROC, 'pAUC_sum',  'AUC', ep, quiet)
+                pass4 = areEpsilonEqual(pAUCx_sum, self.AUCofMeanROC, 'pAUCx_sum', 'AUC', ep, quiet)
             else:
-                pass2 = areEpsilonEqual(AUCi_sum,  self.AUC, 'AUC_i_sum', 'AUC', ep, quietFalse)
-                pass3 = areEpsilonEqual(pAUC_sum,  self.AUC, 'pAUC_sum',  'AUC', ep, quietFalse)
-                pass4 = areEpsilonEqual(pAUCx_sum, self.AUC, 'pAUCx_sum', 'AUC', ep, quietFalse)
+                pass2 = areEpsilonEqual(AUCi_sum,  self.AUC, 'AUC_i_sum', 'AUC', ep, quiet)
+                pass3 = areEpsilonEqual(pAUC_sum,  self.AUC, 'pAUC_sum',  'AUC', ep, quiet)
+                pass4 = areEpsilonEqual(pAUCx_sum, self.AUC, 'pAUCx_sum', 'AUC', ep, quiet)
             #endif
             if not forFolds and self.full_newlabels is not None:
                 allPassed = allIterationsPassed and pass1 and pass2 and pass3 and pass4
             else:
                 allPassed = allIterationsPassed and pass2 and pass3 and pass4
             #endif
-            if allPassed:
-                print(f"\nAll results passed.")
-            else:
-                print(f"\nSome results did not match (failed).")
+            if not quiet:
+                if allPassed:
+                    print(f"\nAll results passed.")
+                else:
+                    print(f"\nSome results did not match (failed).")
+                #endif
             # endif
         # endif
+        return measure_dict
+    #enddef
+
+    def annotateGroup(self, groupIndex, measure_dict, whichMeasures, top=False):
+        import matplotlib.pyplot as plt
+        i     = groupIndex
+        lines = len(whichMeasures)
+        label = ''
+        if self.groupAxis == 'FPR':
+            for m in whichMeasures:
+                if m[-2:] == '_i':
+                    name  = m[:-2]
+                else:
+                    name = m
+                #endif
+                value = measure_dict[i][m] * 100
+                label  += f"${name}_{i+1}={value:0.1f}\\%$\n"
+                #label += f"$AUCn_{i+1}={measure_dict[i]['AUCn_i']*100:0.1f}\\%$\n"
+                #label += f"$avgSens_{i+1}={measure_dict[i]['avgSens']*100:0.1f}\\%$\n"
+            #endfor
+            label = label[:-1]  # remove the final \n (single char)
+            textHeightAxis  = (0.315/5) * lines  # based on fontsize 12; percent axis
+            textWidthPoints = 105               # based on fontsize 12
+            fprLocation = self.groups[groupIndex][0]
+            if top:
+                location = (fprLocation+0.03, 1-textHeightAxis)
+            else:
+                location = (fprLocation+0.03, 0.03)
+            #endif
+            plt.annotate(label, location, textcoords="offset points", xytext=(textWidthPoints, 0),
+                         ha='right', fontsize=12)
+        else:
+            print("annotateGroup only implemented for groupAxis=='FPR' at this time.")
+        #endif
     #enddef
 
     def setFoldsNPclassRatio(self, foldsNPclassRatio):
