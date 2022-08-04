@@ -413,12 +413,14 @@ class DeepROC(FullROC):
             tprLocation = self.groups[groupIndex][0]
             for c in range(0, col+1):
                 if top:
-                    location = (0.02+(0.33*c), tprLocation+0.03)
+                    location = (0+(0.33*c), tprLocation+0.03)
+                    plt.annotate(label[c], location, textcoords="offset points", xytext=(textWidthPoints, 0),
+                                 ha='right', fontsize=12)
                 else:
                     location = ((1.02-0.33)-(0.33*c), tprLocation+0.03)
+                    plt.annotate(label[col-c], location, textcoords="offset points", xytext=(textWidthPoints, 0),
+                                 ha='right', fontsize=12)
                 #endif
-                plt.annotate(label[col-c], location, textcoords="offset points", xytext=(textWidthPoints, 0),
-                             ha='right', fontsize=12)
             #endfor
         else:
             print("annotateGroup only implemented for groupAxis=='FPR' and groupAxis=='TPR'.")
