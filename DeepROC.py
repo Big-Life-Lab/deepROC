@@ -356,10 +356,12 @@ class DeepROC(FullROC):
 
     def annotateGroup(self, groupIndex, measure_dict, whichMeasures, top=False):
         import matplotlib.pyplot as plt
+        import numpy as np
+
         i     = groupIndex
         lines = len(whichMeasures)
-        label = ''
-        if self.groupAxis == 'FPR':
+        if   self.groupAxis == 'FPR':
+            label = ''
             for m in whichMeasures:
                 if m[-2:] == '_i':
                     name  = m[:-2]
@@ -372,18 +374,54 @@ class DeepROC(FullROC):
                 #label += f"$avgSens_{i+1}={measure_dict[i]['avgSens']*100:0.1f}\\%$\n"
             #endfor
             label = label[:-1]  # remove the final \n (single char)
-            textHeightAxis  = (0.315/5) * lines  # based on fontsize 12; percent axis
-            textWidthPoints = 105               # based on fontsize 12
+            textHeightAxis  = (0.345/5) * lines  # based on fontsize 12; percent axis
+            textWidthPoints = 105                # based on fontsize 12
             fprLocation = self.groups[groupIndex][0]
             if top:
-                location = (fprLocation+0.03, 1-textHeightAxis)
+                location = (fprLocation+0.03, 0.97-textHeightAxis)
             else:
                 location = (fprLocation+0.03, 0.03)
             #endif
             plt.annotate(label, location, textcoords="offset points", xytext=(textWidthPoints, 0),
                          ha='right', fontsize=12)
+
+        elif self.groupAxis == 'TPR':
+            # use 3 columns in each horizontal stripe of TPR range, with 3 lines each
+            label       = [""] * 3
+            linesPerCol = 3
+            col         = 0
+            count       = 0
+            for m in whichMeasures:
+                if m[-2:] == '_i':
+                    name  = m[:-2]
+                else:
+                    name = m
+                #endif
+                value       = measure_dict[i][m] * 100
+                temp        = f"${name}_{i+1}={value:0.1f}\\%$\n"
+                label[col] += temp
+                count      += 1
+                if np.mod(count, linesPerCol) == 0:
+                    label[col] = label[col][:-1]  # remove the final \n (single char)
+                    col    += 1
+                #endif
+            #endfor
+            # if we incremented col then ended the loop, reverse the increment, so col is last col
+            if np.mod(count, linesPerCol) == 0:
+                col -= 1
+            textWidthPoints = 105                # based on fontsize 12
+            tprLocation = self.groups[groupIndex][0]
+            for c in range(0, col+1):
+                if top:
+                    location = (0.02+(0.33*c), tprLocation+0.03)
+                else:
+                    location = ((1.02-0.33)-(0.33*c), tprLocation+0.03)
+                #endif
+                plt.annotate(label[col-c], location, textcoords="offset points", xytext=(textWidthPoints, 0),
+                             ha='right', fontsize=12)
+            #endfor
         else:
-            print("annotateGroup only implemented for groupAxis=='FPR' at this time.")
+            print("annotateGroup only implemented for groupAxis=='FPR' and groupAxis=='TPR'.")
         #endif
     #enddef
 
