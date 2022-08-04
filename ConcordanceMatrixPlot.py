@@ -70,6 +70,7 @@ class ConcordanceMatrixPlot(object):
 
     def plotGroup(self, plotTitle=None, groupIndex=None, showError=False, showThresholds=True, showOptimalROCpoints=True, costs=None,
                  saveFileName=None, numShowThresholds=30, showPlot=True, labelThresh=True):
+        from Helpers.DeepROCPlot import plotPartialArea
 
         print('This function has a bug, to be fixed.')
 
@@ -81,7 +82,7 @@ class ConcordanceMatrixPlot(object):
 
         # get group information for AUC
         partial_full_fpr, partial_full_tpr, rangeEndpoints1, groupByOtherAxis, groupByThreshold, \
-          matchedIndices, approxIndices, rocRuleLeft, rocRuleRight = \
+          matchedIndices, approxIndices, group, rocRuleLeft, rocRuleRight = \
           self.ROCdata.getGroupForAUCi(groupIndex, forFolds=False)
 
         self.ROCdata.plotGroup(plotTitle, groupIndex, showError, showThresholds,
@@ -89,7 +90,7 @@ class ConcordanceMatrixPlot(object):
                                showPlot, labelThresh)
 
         # add fills for partial areas (clobbers points, score labels)
-        self.ROCdata.plotPartialArea(partial_full_fpr, partial_full_tpr, showError)
+        plotPartialArea(partial_full_fpr, partial_full_tpr, showError)
 
         return
     #enddef
