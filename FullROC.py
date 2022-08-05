@@ -235,10 +235,29 @@ class FullROC(SimpleROC):
     # uses getC() from the superclass SimpleROC
 
     def set_fpr_tpr(self, fpr=None, tpr=None):
-        '''The set_fpr_tpr method is not allowed for FullROC.'''
-        SystemError('set_fpr_tpr is not allowed for FullROC, because FullROC depends on the integrity ' + \
-                    'of properly spaced points derived from scores and labels.')
-    #enddef
+        '''The set_fpr_tpr method is allowed if the object is empty.'''
+        from sklearn import metrics
+
+        if fpr is None or tpr is None:
+            SystemError('fpr or tpr cannot be empty')
+
+        if self.predicted_scores is not None or self.newlabels is not None:
+            SystemError('Not allowed to set fpr and tpr ' +
+                        'when predicted_scores and labels are already set.')
+
+        if self.full_newlabels is not None:
+            SystemError('Not allowed to set fpr and tpr ' +
+                        'when full_newlabels are already set.')
+
+        self.fpr = fpr
+        self.tpr = tpr
+        self.thresholds = None
+        self.AUC = metrics.auc(self.fpr, self.tpr)
+
+        self.full_fpr = fpr
+        self.full_tpr = tpr
+        self.full_thresholds = None
+    # enddef
 
     def plot(self, plotTitle, showThresholds=True, showOptimalROCpoints=True, costs=None,
              saveFileName=None, numShowThresh=30, showPlot=True, labelThresh=True, full_fpr_tpr=True):
