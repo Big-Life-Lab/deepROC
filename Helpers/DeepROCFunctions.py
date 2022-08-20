@@ -510,6 +510,44 @@ def partial_area_index_proxy(pfpr, ptpr, quiet):
     return PAI
 #enddef
 
+def standardized_partial_area_proxy(pfpr, ptpr, quiet):
+    # this is not the full binormal curve fit version of McClish's sPA
+    # it is instead a proxy for that using a simpler definition
+    '''
+    sPA:        the (vertical) partial area standardized, subtracts trapezoid below major diagonal
+    '''
+    import numpy as np
+
+    # xrange [a,b]
+    a    = float(pfpr[0])
+    b    = float(pfpr[-1])
+    delx = b - a
+    vertical_stripe_area   = (1 * delx)
+
+    # yrange [f,g]
+    f    = float(ptpr[0])
+    g    = float(ptpr[-1])
+    dely = g - f
+    horizontal_stripe_area = (dely * 1)
+
+    if delx == 0:
+        if not quiet:
+            print("Warning: For sPA the width of the region is zero.")
+        sPA   = 0
+    else:
+        # Compute the standardized partial area (sPA) defined in (McClish, 2006), with a correction.
+        # McClish calls Atrapezoid: Amin, but McClish erroneously swapped the Amin & Amax formulas
+        # McClish calls Acolumn:    Amax
+
+        sPA_rescale = lambda x: 0.5 * (1 + x)    # sPA rescales [0,1] to [0.5,1]
+        pAUC        = np.trapz(ptpr, pfpr)       # trapz is y,x
+        Atrapezoid  = (0.5 * (a + b)) * (b - a)  # average height of trap  * width
+        Acolumn     =               1 * (b - a)  #                       1 * width
+        sPA         = sPA_rescale( (pAUC-Atrapezoid)/(Acolumn-Atrapezoid) )
+    #endif
+    return sPA
+#enddef
+
 def areEpsilonEqual(a, b, atext, btext, ep, quiet):
     import numpy as np
     ''' check equality with allowance for round-off errors up to epsilon '''

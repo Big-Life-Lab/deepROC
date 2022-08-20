@@ -100,6 +100,7 @@ class DeepROC(FullROC):
         from Helpers.DeepROCFunctions import concordant_partial_AUC
         from Helpers.DeepROCFunctions import discrete_partial_roc_measures
         from Helpers.DeepROCFunctions import partial_area_index_proxy
+        from Helpers.DeepROCFunctions import standardized_partial_area_proxy
         from Helpers.DeepROCFunctions import areEpsilonEqual
         from Helpers.DeepROCFunctions import showConcordanceMatrixInfo
         from Helpers.DeepROCFunctions import showCmeasures
@@ -249,6 +250,12 @@ class DeepROC(FullROC):
         if not quiet:
             showAllMeasures = True
             showDiscretePartialAUCmeasures(groupIndex+1, measure_dict, showAllMeasures, verbose=verbose)
+        #endif
+
+        sPA = standardized_partial_area_proxy(partial_fpr, partial_fpr, quiet)
+        measure_dict.update(dict(sPA=sPA))
+        if not quiet and verbose:
+            print(f"{'sPA':16s} = {sPA:0.4f}")
         #endif
 
         # show PAI result only if the group ends at FPR == 0
