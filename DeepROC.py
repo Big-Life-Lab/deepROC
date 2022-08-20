@@ -252,7 +252,7 @@ class DeepROC(FullROC):
             showDiscretePartialAUCmeasures(groupIndex+1, measure_dict, showAllMeasures, verbose=verbose)
         #endif
 
-        sPA = standardized_partial_area_proxy(partial_fpr, partial_fpr, quiet)
+        sPA = standardized_partial_area_proxy(partial_fpr, partial_tpr, quiet)
         measure_dict.update(dict(sPA=sPA))
         if not quiet and verbose:
             print(f"{'sPA':16s} = {sPA:0.4f}")
@@ -260,7 +260,7 @@ class DeepROC(FullROC):
 
         # show PAI result only if the group ends at FPR == 0
         if self.groupAxis == 'FPR' and self.groups[groupIndex][0] == 1:
-            PAI = partial_area_index_proxy(partial_fpr, partial_fpr, quiet)
+            PAI = partial_area_index_proxy(partial_fpr, partial_tpr, quiet)
             measure_dict.update(dict(PAI=PAI))
             if not quiet and verbose:
                 print(f"{'PAI':16s} = {PAI:0.4f}  only applies to full or last range")
