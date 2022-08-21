@@ -638,7 +638,8 @@ class DeepROC(FullROC):
 
         pfpr_np    = np.array(ffpr)
         ptpr_np    = np.array(ftpr)
-        pthresh_np = np.array(fthresh)
+        if fthresh is not None:
+            pthresh_np = np.array(fthresh)
         n = len(ffpr)
 
         if rangeAxis1 == FPR:
@@ -657,9 +658,9 @@ class DeepROC(FullROC):
         # when we delete points from pfpr and ptpr, the indices on the left still
         # make sense even if we have changed the indices on the right.  In the
         # other direction both indices are affected.
-        indices_reversed = [1, 0]
+        indices_reversed         = [1, 0]
         rangeEndpoints1_reversed = [rangeEndpoints1[1], rangeEndpoints1[0]]
-        rocRules_reversed = [rocRuleRight, rocRuleLeft]
+        rocRules_reversed        = [rocRuleRight, rocRuleLeft]
         for endpoint, i, rocRule in zip(rangeEndpoints1_reversed, indices_reversed, rocRules_reversed):
 
             # find indices ix which match rangeroc[0]
@@ -680,33 +681,57 @@ class DeepROC(FullROC):
                     if i == 1:  # right/top
                         pfpr_np    = np.delete(pfpr_np,    np.arange(ixR, n))
                         ptpr_np    = np.delete(ptpr_np,    np.arange(ixR, n))
-                        pthresh_np = np.delete(pthresh_np, np.arange(ixR, n))
+                        if fthresh is not None:
+                            pthresh_np = np.delete(pthresh_np, np.arange(ixR, n))
+                        else:
+                            pthresh_np = None
                         pfpr_np    = np.append(pfpr_np,    endpoint)
                         ptpr_np    = np.append(ptpr_np,    rangeEndpoints2[i])
-                        pthresh_np = np.append(pthresh_np, pthresh_np[-1])
+                        if fthresh is not None:
+                            pthresh_np = np.append(pthresh_np, pthresh_np[-1])
+                        else:
+                            pthresh_np = None
                     elif i == 0:  # left/bottom
                         pfpr_np    = np.delete(pfpr_np,    np.arange(0, ixL+1))
                         ptpr_np    = np.delete(ptpr_np,    np.arange(0, ixL+1))
-                        pthresh_np = np.delete(pthresh_np, np.arange(0, ixL+1))
+                        if fthresh is not None:
+                            pthresh_np = np.delete(pthresh_np, np.arange(0, ixL+1))
+                        else:
+                            pthresh_np = None
                         pfpr_np    = np.insert(pfpr_np,    0, endpoint)
                         ptpr_np    = np.insert(ptpr_np,    0, rangeEndpoints2[i])
-                        pthresh_np = np.insert(pthresh_np, 0, pthresh_np[0])
+                        if fthresh is not None:
+                            pthresh_np = np.insert(pthresh_np, 0, pthresh_np[0])
+                        else:
+                            pthresh_np = None
                     # endif
                 else:  # rangeAxis1 == TPR:
                     if i == 1:  # right/top
                         pfpr_np    = np.delete(pfpr_np,    np.arange(ixR, n))
                         ptpr_np    = np.delete(ptpr_np,    np.arange(ixR, n))
-                        pthresh_np = np.delete(pthresh_np, np.arange(ixR, n))
+                        if fthresh is not None:
+                            pthresh_np = np.delete(pthresh_np, np.arange(ixR, n))
+                        else:
+                            pthresh_np = None
                         pfpr_np    = np.append(pfpr_np,    rangeEndpoints2[i])
                         ptpr_np    = np.append(ptpr_np,    endpoint)
-                        pthresh_np = np.append(pthresh_np, pthresh_np[-1])
+                        if fthresh is not None:
+                            pthresh_np = np.append(pthresh_np, pthresh_np[-1])
+                        else:
+                            pthresh_np = None
                     elif i == 0:  # left/bottom
                         pfpr_np    = np.delete(pfpr_np,    np.arange(0, ixL+1))
                         ptpr_np    = np.delete(ptpr_np,    np.arange(0, ixL+1))
-                        pthresh_np = np.delete(pthresh_np, np.arange(0, ixL+1))
+                        if fthresh is not None:
+                            pthresh_np = np.delete(pthresh_np, np.arange(0, ixL+1))
+                        else:
+                            pthresh_np = None
                         pfpr_np    = np.insert(pfpr_np,    0, rangeEndpoints2[i])
                         ptpr_np    = np.insert(ptpr_np,    0, endpoint)
-                        pthresh_np = np.insert(pthresh_np, 0, pthresh_np[0])
+                        if fthresh is not None:
+                            pthresh_np = np.insert(pthresh_np, 0, pthresh_np[0])
+                        else:
+                            pthresh_np = None
                     # endif
                 # endif
             else:  # found one or more indices in ix that match endpoint
@@ -727,20 +752,29 @@ class DeepROC(FullROC):
                     if ix_to_use < n - 1:  # if not last  instance then truncate right part
                         pfpr_np = np.delete(pfpr_np, np.arange(ix_to_use + 1, n))
                         ptpr_np = np.delete(ptpr_np, np.arange(ix_to_use + 1, n))
-                        pthresh_np = np.delete(pthresh_np, np.arange(ix_to_use + 1, n))
+                        if fthresh is not None:
+                            pthresh_np = np.delete(pthresh_np, np.arange(ix_to_use + 1, n))
+                        else:
+                            pthresh_np = None
                     # endif
                 elif i == 0:  # left/bottom
                     if ix_to_use > 0:  # if not first instance then truncate left part
                         pfpr_np = np.delete(pfpr_np, np.arange(0, ix_to_use))
                         ptpr_np = np.delete(ptpr_np, np.arange(0, ix_to_use))
-                        pthresh_np = np.delete(pthresh_np, np.arange(0, ix_to_use))
+                        if fthresh is not None:
+                            pthresh_np = np.delete(pthresh_np, np.arange(0, ix_to_use))
+                        else:
+                            pthresh_np = None
                     # endif
                 # endif
             # endif
         # endfor
         pfpr = pfpr_np.tolist()
         ptpr = ptpr_np.tolist()
-        pthresh = pthresh_np.tolist()
+        if fthresh is not None:
+            pthresh = pthresh_np.tolist()
+        else:
+            pthresh = None
         # return pfpr, ptpr, rangeEndpoints2, rangeEndpoints0, rangeIndices0, approxIndices0
         return pfpr, ptpr, pthresh, rangeEndpoints2, rangeEndpoints0, rangeIndices0, approxIndices0
     # enddef

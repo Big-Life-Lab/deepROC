@@ -41,10 +41,10 @@ def plotPartialArea(pfpr, ptpr, showError):
     plotLine   = lambda x, y: plt.plot(x, y, '--',     color=(0.5, 0.5, 0.5),   linewidth=1.5)
     plotLine2  = lambda x, y: plt.plot(x, y, '-',      color='black',           linewidth=0.25)
     plotpAUCy  = lambda x, y: plt.fill(x, y, 'xkcd:yellow', alpha=0.5,          linewidth=None)
-    plotpAUCx  = lambda x, y: plt.fill(x, y, 'b',      alpha=0.4,               linewidth=None)
+    plotpAUCx  = lambda x, y: plt.fill(x, y, 'xkcd:blue', alpha=0.3,            linewidth=None)
     plotClear  = lambda x, y: plt.fill(x, y, 'w',                               linewidth=None)
     plotpAUCxy = lambda x, y: plt.fill(x, y, 'g',      alpha=0.4,               linewidth=None)
-    plotError  = lambda x, y: plt.fill(x, y, 'r',      alpha=0.25,              linewidth=None)
+    plotError  = lambda x, y: plt.fill(x, y, 'r',      alpha=0.20,              linewidth=None)
     plotErrorxy= lambda x, y: plt.fill(x, y, 'r',      alpha=0.35,              linewidth=None)
     #
     # plot vertical stripe lines
