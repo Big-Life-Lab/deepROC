@@ -375,8 +375,16 @@ class DeepROC(FullROC):
                 else:
                     name = m
                 #endif
-                value = measure_dict[i][m] * 100
-                label  += f"${name}_{i+1}={value:0.1f}\\%$\n"
+                if name == 'avgLRp' or name == 'avgLRn' or name == 'avgOR':
+                    value = measure_dict[i][m]
+                    label += f"${name}_{i+1}={value:0.1f}$\n"  # not percentage
+                elif (name == 'PAI' and self.groups[i][1] != 1) or \
+                     (name == 'PAI' and self.groupAxis != 'FPR'):
+                    continue  # PAI only exists for FPR groups ending at 1
+                else:
+                    value = measure_dict[i][m] * 100
+                    label  += f"${name}_{i+1}={value:0.1f}\\%$\n" # percentage
+                #endif
                 #label += f"$AUCn_{i+1}={measure_dict[i]['AUCn_i']*100:0.1f}\\%$\n"
                 #label += f"$avgSens_{i+1}={measure_dict[i]['avgSens']*100:0.1f}\\%$\n"
             #endfor
