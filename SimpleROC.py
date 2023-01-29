@@ -211,8 +211,11 @@ class SimpleROC(object):
         # https://stackoverflow.com/questions/57708023/plotting-the-roc-curve-of-k-fold-cross-validation
         # but improved here, re the (0,0) ROC point
         if showPlot:
-            fig      = plt.figure()
-            ax       = fig.add_subplot(1, 1, 1)
+            fig = plt.figure()
+            ax  = fig.add_subplot(1, 1, 1)
+        else:
+            fig = None
+            ax  = None
         mean_fpr = np.linspace(0, 1, 200)
         mean_fpr = np.insert(mean_fpr, 0, 0)  # insert an extra 0 at the beginning
         mean_fpr = np.append(mean_fpr, 1)     # insert an extra 1 at the end
