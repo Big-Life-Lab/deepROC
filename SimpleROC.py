@@ -210,8 +210,9 @@ class SimpleROC(object):
         # https://ogrisel.github.io/scikit-learn.org/sklearn-tutorial/auto_examples/plot_roc_crossval.html
         # https://stackoverflow.com/questions/57708023/plotting-the-roc-curve-of-k-fold-cross-validation
         # but improved here, re the (0,0) ROC point
-        fig      = plt.figure()
-        ax       = fig.add_subplot(1, 1, 1)
+        if showPlot:
+            fig      = plt.figure()
+            ax       = fig.add_subplot(1, 1, 1)
         mean_fpr = np.linspace(0, 1, 200)
         mean_fpr = np.insert(mean_fpr, 0, 0)  # insert an extra 0 at the beginning
         mean_fpr = np.append(mean_fpr, 1)     # insert an extra 1 at the end
@@ -225,14 +226,16 @@ class SimpleROC(object):
             tprs[i][0]  = 0.0
             tprs[i][-1] = 1.0
             aucs.append(auc(self.fpr_fold[i], self.tpr_fold[i]))
-            plt.plot(self.fpr_fold[i], self.tpr_fold[i], lw=2, alpha=0.3,
-                     label=f'Fold {i+1}, AUC={aucs[i]:0.2f}')
+            if showPlot:
+                plt.plot(self.fpr_fold[i], self.tpr_fold[i], lw=2, alpha=0.3,
+                         label=f'Fold {i+1}, AUC={aucs[i]:0.2f}')
         #endfor
 
         # add major diagonal
-        x = np.linspace(0, 1, 3)
-        plt.plot(x, x, linestyle=':', color='black')  # default linewidth is 1.5
-        plt.plot(x, x, linestyle='-', color='black', linewidth=0.25)
+        if showPlot:
+            x = np.linspace(0, 1, 3)
+            plt.plot(x, x, linestyle=':', color='black')  # default linewidth is 1.5
+            plt.plot(x, x, linestyle='-', color='black', linewidth=0.25)
         # the above thin (not quite visible) solid line, stops color fills from passing through it
 
         # add major diagonal
@@ -244,16 +247,18 @@ class SimpleROC(object):
         self.AUCs         = aucs
         self.AUChighCI    = np.minimum(self.meanAUC + (2 * self.stdAUC), 1)
         self.AUClowCI     = np.maximum(self.meanAUC - (2 * self.stdAUC), 0)
-        plotSimpleROC(self.mean_fpr, self.mean_tpr, plotTitle)
-        plt.legend()
+        if showPlot:
+            plotSimpleROC(self.mean_fpr, self.mean_tpr, plotTitle)
+            plt.legend()
         # print(f'Mean ROC, AUC={self.meanAUC:0.3f} +/- {self.stdAUC:0.3f}')
         # print(f'AUC of mean ROC is {self.AUCofMeanROC:0.3f}')
 
         self.std_tpr = np.std(tprs, axis=0)
         tpr_upper    = np.minimum(self.mean_tpr + (2*self.std_tpr), 1)
         tpr_lower    = np.maximum(self.mean_tpr - (2*self.std_tpr), 0)
-        plt.fill_between(self.mean_fpr, tpr_lower, tpr_upper, color='grey', alpha=.2,
-                         label=r'Mean ROC $\pm$2 stddev.')
+        if showPlot:
+            plt.fill_between(self.mean_fpr, tpr_lower, tpr_upper, color='grey', alpha=.2,
+                             label=r'Mean ROC $\pm$2 stddev.')
         if showPlot:
             plt.show()
         #endif
