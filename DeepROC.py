@@ -302,12 +302,18 @@ class DeepROC(FullROC):
     def analyze(self, forFolds=False, verbose=False):
         from Helpers.DeepROCFunctions import areEpsilonEqual
 
-        measure_dict = []
         if self.groupsArePerfectCoveringSet:
             Ci_sum, AUCi_sum, pAUC_sum, pAUCx_sum = [0, 0, 0, 0]
             allIterationsPassed = True
         # endif
-        numgroups = len(self.groups)
+
+        if forFolds:
+            # prior to analyzeGroup, which analyzes the mean ROC curve we need to...
+            self.computeMeanROC()
+        # endif
+
+        numgroups    = len(self.groups)
+        measure_dict = []
         for i in range(0, numgroups):
             print(f'\nGroup {i + 1}:')
             iterationPassed, iteration_dict = self.analyzeGroup(i, showData=True, forFolds=forFolds, quiet=False,
@@ -502,7 +508,12 @@ class DeepROC(FullROC):
 
         showInterimPlot = False
         if forFolds:
-            fig, ax = self.plot_folds(plotTitle, saveFileName=saveFileName, showPlot=showInterimPlot)
+            if self.nextfold > 10:
+                # then do not show the legend
+                fig, ax = self.plot_folds(plotTitle, saveFileName=saveFileName, showPlot=showInterimPlot,
+                                          showLegend=False)
+            else:
+                fig, ax = self.plot_folds(plotTitle, saveFileName=saveFileName, showPlot=showInterimPlot)
         else:
             fig, ax = self.plot(plotTitle, showThresholds, showOptimalROCpoints, costs, saveFileName,
                                 numShowThresh, showInterimPlot, labelThresh, full_fpr_tpr)
@@ -582,6 +593,11 @@ class DeepROC(FullROC):
         if showPlot:
             plt.show()
         # endif
+
+        if saveFileName is not None:
+            saveFileName = saveFileName[0:-4] + f'_{groupIndex}.png'
+            fig.savefig(saveFileName)
+        #endif
 
         # modeShort = mode[:-3]  # training -> train, testing -> test
         # fig.savefig(f'output/ROC_{modeShort}_{testNum}-{index}.png')
