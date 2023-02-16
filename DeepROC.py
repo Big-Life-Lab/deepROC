@@ -510,10 +510,10 @@ class DeepROC(FullROC):
         if forFolds:
             if self.nextfold > 10:
                 # then do not show the legend
-                fig, ax = self.plot_folds(plotTitle, saveFileName=saveFileName, showPlot=showInterimPlot,
+                fig, ax = self.plot_folds(plotTitle, saveFileName=None, showPlot=showInterimPlot,
                                           showLegend=False)
             else:
-                fig, ax = self.plot_folds(plotTitle, saveFileName=saveFileName, showPlot=showInterimPlot)
+                fig, ax = self.plot_folds(plotTitle, saveFileName=None, showPlot=showInterimPlot)
         else:
             fig, ax = self.plot(plotTitle, showThresholds, showOptimalROCpoints, costs, saveFileName,
                                 numShowThresh, showInterimPlot, labelThresh, full_fpr_tpr)
