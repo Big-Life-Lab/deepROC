@@ -56,9 +56,9 @@ def makeLabels01(labels, poslabel):
     import numpy as np
     posIndex = list(np.argwhere(np.array(labels) == poslabel).flatten())
     negIndex = list(np.argwhere(np.array(labels) != poslabel).flatten())
-    newlabels = labels.copy()
+    newlabels = list(labels).copy()  # must be list here, or indexing below creates net new entries in a longer array!!
     for i in negIndex:
-        newlabels[i] = 0
+        newlabels[i] = 0  # this innocent looking code is wrong for pandas.Series, but fine for list
     for i in posIndex:
         newlabels[i] = 1
     return newlabels
