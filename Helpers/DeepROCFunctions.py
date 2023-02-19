@@ -411,20 +411,11 @@ def discrete_partial_roc_measures(partial_fpr, partial_tpr, n_negatives, n_posit
             sumPPVArea  = sumPPVArea  + ((pi_pos_pop * avgtpr) / PPV_denominator)    * (ldelx + ldely)
         if NPV_denominator != 0:
             sumNPVArea  = sumNPVArea  + ((pi_neg_pop * (1-avgfpr)) / NPV_denominator)* (ldelx + ldely)
-        if avgfpr == 0:
-            sumLRpArea  = np.inf
-        else:
+        if avgfpr > 0:
             sumLRpArea  = sumLRpArea  + (avgtpr / avgfpr)
-        if (1-avgfpr) == 0:
-            sumLRnArea  = np.inf
-        else:
+        if (1-avgfpr) > 0:
             sumLRnArea  = sumLRnArea  + ((1-avgtpr) / (1-avgfpr))
-
-        if avgfpr == 0 or (1-avgtpr) == 0:
-            sumORArea   = np.inf
-        elif (1-avgfpr) == 0:
-            sumORArea   = sumORArea + 0
-        else:
+        if avgfpr > 0 and (1-avgtpr) > 0:
             sumORArea   = sumORArea   + ( (avgtpr / avgfpr) / ((1-avgtpr) / (1-avgfpr)) )
 
         delx    = delx + ldelx
